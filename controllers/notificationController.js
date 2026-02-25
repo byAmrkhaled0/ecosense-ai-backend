@@ -5,18 +5,20 @@ exports.getNotifications = async (req, res) => {
   try {
     let query = {};
 
+    // التعديل هنا: السيرفر لازم يدور بكلمة recipient
+    // لأن ده الاسم اللي احنا عرفناه في الموديل
     if (req.user.role === "worker") {
-      // العامل يشوف التنبيهات اللي تخص قطاعه بس
+      // العامل يشوف التنبيهات اللي تخص قطاعه
       query = { sectorId: req.user.assignedSector };
     } else {
-      // المالك يشوف كل تنبيهات مزرعته
-      query = { ownerId: req.user._id };
+      // المالك يشوف التنبيهات اللي هو المستلم بتاعها
+      query = { recipient: req.user._id };
     }
 
     const notifications = await Notification.find(query)
-      .sort("-createdAt")
+      .sort("-createdAt") // الأحدث فوق
       .limit(20)
-      .populate("sectorId", "name"); // عشان نعرف التنبيه جاي من أنهي قطاع
+      .populate("sectorId", "name");
 
     res.status(200).json({
       success: true,
@@ -34,7 +36,7 @@ exports.markAsRead = async (req, res) => {
     const notification = await Notification.findByIdAndUpdate(
       req.params.id,
       { isRead: true },
-      { new: true }, // يرجع البيانات بعد التعديل
+      { new: true, runValidators: true },
     );
 
     if (!notification)

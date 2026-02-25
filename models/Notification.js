@@ -1,10 +1,12 @@
 const mongoose = require("mongoose");
 
 const notificationSchema = new mongoose.Schema({
+  // المستخدم المستلم للإشعار (صاحب المزرعة أو العامل)
   recipient: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
     required: true,
+    index: true, // إضافة index للسرعة في جلب إشعارات مستخدم معين
   },
   title: {
     type: String,
@@ -16,13 +18,15 @@ const notificationSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ["info", "warning", "critical"],
+    // تم إضافة 'alert' و 'success' للقائمة عشان الكود ميضربش
+    enum: ["info", "warning", "critical", "alert", "success"],
     default: "info",
   },
   isRead: {
     type: Boolean,
     default: false,
   },
+  // ربط الإشعار بقطاع معين (اختياري)
   sectorId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Sector",
@@ -32,5 +36,8 @@ const notificationSchema = new mongoose.Schema({
     default: Date.now,
   },
 });
+
+// ترتيب الإشعارات من الأحدث للأقدم تلقائياً
+notificationSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model("Notification", notificationSchema);

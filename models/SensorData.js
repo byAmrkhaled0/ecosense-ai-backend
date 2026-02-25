@@ -34,9 +34,11 @@ const SensorDataSchema = new mongoose.Schema(
 
     // 🌱 قراءات التربة
     soil: {
-      moisture: { type: Number, default: null }, // رطوبة التربة
+      moisture: { type: Number, default: null }, // رطوبة التربة (المتوسط)
       temperature: { type: Number, default: null }, // حرارة التربة
       ph: { type: Number, default: null }, // حموضة التربة
+      // [إضافة]: لو عندك كذا سنسور رطوبة في نفس القطعة
+      individual_sensors: [{ type: Number }],
     },
 
     // ☀️ الإضاءة
@@ -46,20 +48,27 @@ const SensorDataSchema = new mongoose.Schema(
     analysis: {
       status: {
         type: String,
-        enum: ["Healthy", "Warning", "Critical", "Processing"],
-        default: "Processing",
+        // تم تحديث القائمة لتشمل Unknown لتجنب خطأ الـ Validation
+        enum: [
+          "Healthy",
+          "Warning",
+          "Critical",
+          "Processing",
+          "Unknown",
+          "Danger",
+          "Good",
+        ],
+        default: "Unknown",
       },
-      recommendation: { type: String, default: null }, // نصيحة الـ AI (مثلاً: قلل الري)
+      recommendation: { type: String, default: null }, // نصيحة الـ AI
     },
   },
   {
-    // timestamps: true بتضيف لنا createdAt و updatedAt تلقائياً
-    // وده بيغنينا عن حقل timestamp اليدوي وبيكون أدق
     timestamps: true,
   },
 );
 
-// تحسين البحث للـ Dashboard: جلب أحدث قراءات لقطاع معين تبع صاحب مزرعة معين
+// تحسين البحث للـ Dashboard
 SensorDataSchema.index({ ownerId: 1, sectorId: 1, createdAt: -1 });
 
 module.exports = mongoose.model("SensorData", SensorDataSchema);

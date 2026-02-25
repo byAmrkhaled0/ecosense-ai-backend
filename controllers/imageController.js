@@ -133,33 +133,6 @@ exports.getImageHistory = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
-/* ============================================================
-    3️⃣ UPDATE IMAGE ANALYSIS (تحديث نتيجة تحليل الـ AI للصور)
-    PATCH /api/images/:id/analyze
-============================================================ */
-exports.updateAnalysis = async (req, res) => {
-  try {
-    const { status, diseaseName, confidence } = req.body;
-
-    const log = await ImageLog.findByIdAndUpdate(
-      req.params.id,
-      {
-        analysisResult: {
-          status,
-          diseaseName,
-          confidence,
-        },
-      },
-      { new: true },
-    );
-
-    if (!log) return res.status(404).json({ message: "السجل غير موجود." });
-
-    res.status(200).json({ success: true, data: log });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-};
 
 /* ============================================================
     4️⃣ DELETE IMAGE LOG

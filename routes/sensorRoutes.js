@@ -1,21 +1,22 @@
 const express = require("express");
 const router = express.Router();
-const {
-  uploadData,
-  getLatest,
-  predictStatus,
-  getHistory,
-  getSectorStats, // ✅ تأكد إن الاسم ده هو اللي مكتوب هنا
-} = require("../controllers/sensorController");
+const sensorController = require("../controllers/sensorController");
+const { protect, restrictTo } = require("../middleware/authMiddleware");
 
-const { protect, authorize } = require("../middleware/authMiddleware");
+// 1. استقبال البيانات من الـ ESP32 (دي مش محتاجة Token لو الجهاز بيبعت سريال بس)
+// ملاحظة: لو مأمنها بـ API Key يكون أحسن، بس حالياً هنخليها مفتوحة للجهاز
+router.post("/upload", sensorController.uploadData);
 
-router.post("/upload", protect, uploadData);
-router.get("/latest", protect, getLatest);
-router.post("/predict", protect, predictStatus);
-router.get("/history", protect, getHistory);
+// --- كل الروابط اللي جاية محتاجة تسجيل دخول (protect) ---
+router.use(protect);
 
-// السطر 16 - تأكد أن getSectorStats معرفة فوق
-router.get("/stats", protect, authorize("owner"), getSectorStats);
+// 2. جلب آخر قراءة (للموبايل والويب دشبورد)
+router.get("/latest", sensorController.getLatest);
+
+// 3. جلب سجل البيانات (History) مع البحث والفلترة
+router.get("/history", sensorController.getHistory);
+
+// 4. جلب الإحصائيات التحليلية (Analytics)
+router.get("/analytics", sensorController.getAnalytics);
 
 module.exports = router;
