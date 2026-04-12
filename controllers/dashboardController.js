@@ -2,35 +2,35 @@ const Sector = require("../models/Sector");
 const User = require("../models/User");
 const Device = require("../models/Device");
 const SensorData = require("../models/SensorData");
-const Notification = require("../models/Notification"); // تأكد من استيراد الموديل
+const Notification = require("../models/Notification");
 
 exports.getDashboard = async (req, res) => {
   try {
     const userRole = req.user.role;
     const userId = req.user._id;
 
-    // --- حالة المالك (Owner) ---
+    // --- 1️⃣ حالة المالك (Owner) ---
     if (userRole === "owner") {
-      // 1. الإحصائيات العامة للمالك
-      const totalSectors = await Sector.countDocuments({ owner: userId });
+      // تعديل: البحث بـ ownerId بدل owner ليتوافق مع الموديلات الجديدة
+      const totalSectors = await Sector.countDocuments({ ownerId: userId });
       const totalWorkers = await User.countDocuments({
         ownerId: userId,
         role: "worker",
       });
-      const totalDevices = await Device.countDocuments({ owner: userId });
+      const totalDevices = await Device.countDocuments({ ownerId: userId });
       const onlineDevices = await Device.countDocuments({
-        owner: userId,
+        ownerId: userId,
         status: "online",
       });
 
-      // 2. جلب كل القطاعات التابعة له
-      const sectors = await Sector.find({ owner: userId }).populate(
+      // جلب القطاعات مع بيانات العامل
+      const sectors = await Sector.find({ ownerId: userId }).populate(
         "assignedWorker",
-        "firstName lastName",
+        "firstName lastName phoneNumber",
       );
 
-      // 3. التنبيهات الحرجة لكل المزرعة
-      const recentAlerts = await Notification.find({ ownerId: userId })
+      // التنبيهات (Notification تستخدم recipient أو ownerId حسب تصميمك، هنا ثبتناها ownerId)
+      const recentAlerts = await Notification.find({ recipient: userId })
         .sort("-createdAt")
         .limit(5)
         .populate("sectorId", "name");
@@ -51,29 +51,26 @@ exports.getDashboard = async (req, res) => {
       });
     }
 
-    // --- حالة العامل (Worker) ---
+    // --- 2️⃣ حالة العامل (Worker) ---
     if (userRole === "worker") {
-      // التأكد من أن العامل مرتبط بقطاع
-      if (!req.user.assignedSector) {
-        return res.status(403).json({
+      // تعديل: العامل بيبحث عن القطاعات اللي هو "assignedWorker" فيها
+      const sector = await Sector.findOne({ assignedWorker: userId });
+
+      if (!sector) {
+        return res.status(404).json({
           success: false,
-          message: "لم يتم تعيين قطاع لك بعد، يرجى مراجعة صاحب المزرعة.",
+          message: "لم يتم تعيين قطاع لك بعد.",
         });
       }
 
-      const sectorId = req.user.assignedSector;
+      // جلب آخر قراءة حساسات (تعديل: السنسور بيستخدم createdAt مش timestamp)
+      const latestReadings = await SensorData.findOne({ sectorId: sector._id })
+        .sort("-createdAt")
+        .lean();
 
-      // 1. جلب بيانات القطاع الخاص به فقط
-      const sector = await Sector.findById(sectorId);
-
-      // 2. جلب آخر قراءات الحساسات لهذا القطاع فقط
-      const latestReadings = await SensorData.find({ sectorId: sectorId })
-        .sort("-timestamp")
-        .limit(1);
-
-      // 3. التنبيهات الخاصة بقطاعه فقط
+      // التنبيهات الخاصة بقطاعه
       const sectorNotifications = await Notification.find({
-        sectorId: sectorId,
+        sectorId: sector._id,
       })
         .sort("-createdAt")
         .limit(5);
@@ -83,23 +80,20 @@ exports.getDashboard = async (req, res) => {
         role: "worker",
         data: {
           assignedSector: sector,
-          latestReadings: latestReadings,
+          latestReadings: latestReadings || "لا توجد قراءات حتى الآن",
           notifications: sectorNotifications,
         },
       });
     }
 
-    // --- حالة الأدمن (Admin) - اختياري ---
+    // --- 3️⃣ حالة الأدمن ---
     if (userRole === "admin") {
       const totalUsers = await User.countDocuments();
       const totalAllDevices = await Device.countDocuments();
       return res.status(200).json({
         success: true,
         role: "admin",
-        data: {
-          totalUsers,
-          totalAllDevices,
-        },
+        data: { totalUsers, totalAllDevices },
       });
     }
   } catch (err) {

@@ -36,13 +36,13 @@ const SensorDataSchema = new mongoose.Schema(
     soil: {
       moisture: { type: Number, default: null }, // رطوبة التربة (المتوسط)
       temperature: { type: Number, default: null }, // حرارة التربة
-      ph: { type: Number, default: null }, // حموضة التربة
+
       // [إضافة]: لو عندك كذا سنسور رطوبة في نفس القطعة
       individual_sensors: [{ type: Number }],
     },
 
     // ☀️ الإضاءة
-    light: { type: Number, default: null },
+    light: { type: String, default: null },
 
     // 🧠 نتائج تحليل الذكاء الاصطناعي (AI Analysis)
     analysis: {

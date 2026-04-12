@@ -14,13 +14,11 @@ const sectorSchema = new mongoose.Schema(
       required: [true, "يرجى تحديد نوع المحصول"],
     },
 
-    // المساحة (مهمة للحسابات الزراعية والداشبورد)
     area: {
-      type: Number, // بالمتر المربع أو الفدان
+      type: Number,
       default: 0,
     },
 
-    // الموقع (إحداثيات أو وصف مكاني)
     location: {
       type: String,
       default: "غير محدد",
@@ -30,22 +28,21 @@ const sectorSchema = new mongoose.Schema(
       type: String,
     },
 
-    // صاحب المزرعة (المالك)
-    owner: {
+    // صاحب المزرعة
+    ownerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index: true,
     },
 
-    // العامل المسؤول عن هذا القطاع
-    // الربط ده هو اللي بيخلينا نفلتر الداشبورد للعامل
+    // العامل المسؤول
     assignedWorker: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
     },
 
-    // حالة القطاع (هل فيه مشكلة حالياً؟)
     healthStatus: {
       type: String,
       enum: ["Healthy", "Warning", "Critical"],
@@ -53,12 +50,14 @@ const sectorSchema = new mongoose.Schema(
     },
   },
   {
-    timestamps: true, // بيضيف createdAt و updatedAt أوتوماتيك
+    timestamps: true,
   },
 );
 
-// إضافة Index لتحسين سرعة البحث بالمالك أو العامل
-sectorSchema.index({ owner: 1 });
+/* ⚠️ تصحيح الـ Indexes: 
+إنت كنت كاتب owner: 1 والحقل عندك اسمه ownerId
+*/
+sectorSchema.index({ ownerId: 1 }); // تم التصحيح
 sectorSchema.index({ assignedWorker: 1 });
 
 module.exports = mongoose.model("Sector", sectorSchema);

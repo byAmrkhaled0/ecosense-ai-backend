@@ -2,54 +2,76 @@ const mongoose = require("mongoose");
 
 const ImageLogSchema = new mongoose.Schema(
   {
-    // ✅ الشخص اللي صور (سواء صاحب المزرعة أو العامل)
+    // 👤 الشخص اللي صور (سواء صاحب المزرعة أو العامل)
     capturedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
       index: true,
     },
-    // ✅ صاحب المزرعة الأصلي (عشان يظهر في الداشبورد بتاعته)
+
+    // 👨‍🌾 صاحب المزرعة الأصلي (المالك الأساسي للداتا)
     ownerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
       index: true,
     },
-    // ✅ القطاع اللي الصورة اتأخدت فيه (عشان نعرف نوع الزرعة)
+
+    // 📍 القطاع اللي الصورة اتأخدت فيه
     sectorId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Sector",
       required: true,
+      index: true,
     },
-    // ✅ رابط الصورة (Cloudinary / S3 / Local)
+
+    // 🖼️ رابط الصورة على السيرفر
     imageUrl: {
       type: String,
       required: [true, "Image URL is required"],
     },
-    // ✅ تحليل الذكاء الاصطناعي (اكتشاف الأمراض)
+
+    // 🧠 نتائج تحليل الذكاء الاصطناعي (AI Analysis)
     analysisResult: {
       status: {
         type: String,
-        enum: ["Healthy", "Infected", "Pending"],
+        // تم تحديث القائمة لتشمل حالات المعالجة لضمان مرونة النظام
+        enum: ["Healthy", "Infected", "Pending", "Processing", "Unknown"],
         default: "Pending",
       },
-      diseaseName: { type: String, default: "None" }, // اسم المرض المكتشف
-      confidence: { type: Number, default: 0 }, // نسبة التأكد (0-100)
+      diseaseName: {
+        type: String,
+        default: "None",
+      }, // اسم المرض المكتشف (مثلاً: Tomato Blight)
+      confidence: {
+        type: Number,
+        default: 0,
+      }, // نسبة التأكد من 0 لـ 100
+      recommendation: {
+        type: String,
+        default: null,
+      },
     },
-    // السبب وراء التقاط الصورة
+
+    // ❓ سبب التقاط الصورة
     captureReason: {
       type: String,
-      enum: ["Scheduled", "Warning_Trigger", "Manual"],
-      default: "Manual",
+      enum: {
+        values: ["Routine", "Alert", "Scheduled", "Manual Scan", "Unknown"], // أضفنا Manual Scan هنا
+        message: "{VALUE} غير مدعوم في سبب الالتقاط",
+      },
+      default: "Manual Scan",
     },
-    // ربط الصورة بآخر قراءة مستشعر مسجلة
+
+    // 🔗 ربط الصورة بآخر قراءة مستشعر (عشان نربط الأرقام بالصور)
     relatedReadingId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "SensorData",
       default: null,
     },
-    // الجهاز اللي التقط الصورة (لو كاميرا ثابتة مثلاً)
+
+    // 🔌 الجهاز اللي التقط الصورة (لو فيه كاميرا ESP32-Cam مثلاً)
     deviceId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Device",
@@ -57,11 +79,12 @@ const ImageLogSchema = new mongoose.Schema(
     },
   },
   {
-    timestamps: true, // بيغنينا عن حقل الـ timestamp اليدوي لأنه بيعمل createdAt و updatedAt تلقائياً
+    // بيعمل createdAt و updatedAt تلقائياً
+    timestamps: true,
   },
 );
 
-// تحسين سرعة البحث باليوزر والوقت والقطاع
+// تحسين البحث للداشبورد (البحث بالمالك والقطاع مع ترتيب زمني تنازلي)
 ImageLogSchema.index({ ownerId: 1, sectorId: 1, createdAt: -1 });
 
 module.exports = mongoose.model("ImageLog", ImageLogSchema);

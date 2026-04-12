@@ -83,14 +83,16 @@ const userSchema = new mongoose.Schema({
 // 🔐 تشفير الباسورد قبل الحفظ
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-  this.password = await bcrypt.hash(this.password, 10);
+  // تأكد إنك بتستخدم ملح (Salt) مناسب
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
   next();
 });
 
 // 🎫 إنشاء JWT token (أضفنا الـ role للـ payload لسهولة استخدامه في الفرونت إند)
 userSchema.methods.getSignedToken = function () {
   return jwt.sign({ id: this._id, role: this.role }, process.env.JWT_SECRET, {
-    expiresIn: "7d",
+    expiresIn: process.env.JWT_EXPIRE || "7d",
   });
 };
 

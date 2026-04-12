@@ -1,7 +1,6 @@
 const SensorData = require("../models/SensorData");
 const Device = require("../models/Device");
 const Sector = require("../models/Sector");
-const User = require("../models/User");
 const Notification = require("../models/Notification");
 const axios = require("axios");
 const mongoose = require("mongoose");
@@ -11,111 +10,160 @@ const mongoose = require("mongoose");
 ============================================================ */
 exports.uploadData = async (req, res) => {
   try {
-    const { deviceSerial, temperature, humidity, soilMoisture, soilPH, light } =
-      req.body;
+    const { deviceSerial, temp, hum, soilMoist, soilTemp, light } = req.body;
 
-    // البحث عن الجهاز ومعرفة القطاع المرتبط به
-    const device = await Device.findOne({ deviceSerial }).populate("sector");
+    if (!deviceSerial) {
+      return res
+        .status(400)
+        .json({ success: false, message: "deviceSerial مطلوب" });
+    }
 
-    if (!device || !device.sector) {
+    // 1. البحث عن الجهاز وعمل Populate للقطاع
+    const device = await Device.findOne({ deviceSerial }).populate("sectorId");
+
+    if (!device) {
       return res.status(404).json({
         success: false,
-        message: "الجهاز غير مسجل أو غير مربوط بقطاع معين",
+        message: `الجهاز ${deviceSerial} غير مسجل، يرجى إضافته أولاً`,
       });
     }
 
-    const cropType = device.sector.cropType;
+    // 🚩 الخطوة السحرية: استخراج الـ IDs بشكل مرن (Robust Extraction)
+    // بنسحب الـ ownerId سواء كان مخزن كـ ID أو كائن، ونفس الكلام للقطاع
+    const finalOwnerId =
+      device.ownerId || (device.sectorId ? device.sectorId.ownerId : null);
+    const finalSectorId = device.sectorId
+      ? device.sectorId._id || device.sectorId
+      : null;
 
-    // إرسال البيانات لسيرفر الـ AI
+    // التحقق من وجود البيانات الأساسية قبل الحفظ لمنع الـ Validation Error
+    if (!finalOwnerId || !finalSectorId) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "بيانات الجهاز غير مكتملة (يفتقد للمالك أو القطاع في الداتابيز)",
+      });
+    }
+
+    // 2. محاولة الاتصال بسيرفر الـ AI
     let aiAnalysis = {
       status: "Unknown",
       recommendation: "سيرفر الـ AI غير متصل",
     };
+
     try {
       const aiResponse = await axios.post(
         process.env.AI_API_URL || "http://127.0.0.1:8000/predict",
         {
-          cropType,
-          temperature,
-          humidity,
-          soilMoisture,
-          soilPH,
-          light,
+          cropType: device.sectorId ? device.sectorId.cropType : "general",
+          temperature: temp,
+          humidity: hum,
+          soilMoisture: soilMoist,
+          soilTemp: soilTemp,
+          light: light,
         },
+        { timeout: 4000 },
       );
 
-      aiAnalysis = {
-        status: aiResponse.data.status,
-        recommendation: aiResponse.data.recommendations.join(" | "),
-      };
+      if (aiResponse.data) {
+        aiAnalysis = {
+          status: aiResponse.data.status || "Unknown",
+          recommendation: aiResponse.data.recommendations
+            ? aiResponse.data.recommendations.join(" | ")
+            : "لا توجد توصيات حالياً",
+        };
+      }
     } catch (aiErr) {
-      console.log("AI Server Error: ", aiErr.message);
+      console.log("⚠️ AI Server unreachable, using defaults.");
     }
 
-    // حفظ القراءة في الداتابيز
+    // 3. حفظ القراءة في SensorData (استخدام القيم المستخرجة)
     const newData = await SensorData.create({
-      ownerId: device.owner,
-      sectorId: device.sector._id,
+      ownerId: finalOwnerId,
+      sectorId: finalSectorId,
       deviceId: device._id,
-      air: { temperature, humidity },
-      soil: { moisture: soilMoisture, ph: soilPH },
-      light,
+      air: { temperature: temp, humidity: hum },
+      soil: { moisture: soilMoist, temperature: soilTemp },
+      light: String(light),
       analysis: aiAnalysis,
     });
 
-    // تحديث حالة الجهاز وتوقيت النشاط
-    device.status = "online";
-    device.lastPing = Date.now();
-    await device.save();
+    // 4. تحديث حالة الجهاز لـ Online
+    await Device.findByIdAndUpdate(device._id, {
+      status: "online",
+      lastPing: Date.now(),
+    });
 
-    // نظام التنبيهات الفوري (Logic)
-    if (temperature > 45 || soilMoisture < 10) {
+    // 5. نظام التنبيهات الفوري
+    if (temp > 45 || soilMoist < 10) {
       await Notification.create({
         title: "🚨 تنبيه خطر",
-        message: `تم رصد قراءات حرجة في قطاع ${device.sector.name}. الحالة: ${aiAnalysis.status}`,
-        // تأكد من نوع الـ type المسموح به في الموديل عندك (لو alert مش شغال جرب warning)
-        type: "warning",
-        // غيرنا ownerId لـ recipient عشان ده اللي الموديل طالبه
-        recipient: device.owner,
-        sectorId: device.sector._id,
+        message: `قراءات حرجة في ${device.sectorId ? device.sectorId.name : "قطاعك"}. حرارة: ${temp}°C، رطوبة: ${soilMoist}%`,
+        type: "alert",
+        recipient: finalOwnerId,
+        sectorId: finalSectorId,
       });
     }
 
-    return res
-      .status(201)
-      .json({ success: true, analysis: aiAnalysis, data: newData });
+    res.status(201).json({
+      success: true,
+      message: "تم استقبال البيانات ومعالجتها بنجاح",
+      data: newData,
+    });
   } catch (err) {
+    console.error("❌ Upload Error:", err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 };
-
 /* ============================================================
-2️⃣ GET LATEST READING (آخر قراءة محدثة)
+2️⃣ GET LATEST READING (آخر قراءة محدثة للـ Dashboard)
 ============================================================ */
 exports.getLatest = async (req, res) => {
   try {
-    let filter =
-      req.user.role === "worker"
-        ? { sectorId: req.user.assignedSector }
+    const { sectorId } = req.query;
+    let filter = {};
+
+    if (req.user.role === "worker") {
+      filter = { sectorId: req.user.assignedSector };
+    } else {
+      filter = sectorId
+        ? { ownerId: req.user._id, sectorId }
         : { ownerId: req.user._id };
+    }
 
     const latestData = await SensorData.findOne(filter)
-      .sort({ timestamp: -1 })
-      .populate("sectorId", "name");
+      .sort({ createdAt: -1 })
+      .populate("sectorId", "name cropType location")
+      .populate("deviceId", "deviceSerial status")
+      .lean();
 
-    if (!latestData)
+    if (!latestData) {
       return res
         .status(404)
-        .json({ success: false, message: "لا توجد بيانات" });
+        .json({ success: false, message: "لا توجد بيانات حالياً" });
+    }
 
-    res.status(200).json({ success: true, data: latestData });
+    res.status(200).json({
+      success: true,
+      data: {
+        timestamp: latestData.createdAt,
+        sector: latestData.sectorId,
+        device: latestData.deviceId,
+        readings: {
+          air: latestData.air,
+          soil: latestData.soil,
+          light: latestData.light,
+        },
+        ai_analysis: latestData.analysis,
+      },
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 };
 
 /* ============================================================
-3️⃣ GET HISTORY (سجل البيانات مع البحث والصفحات)
+3️⃣ GET HISTORY (سجل البيانات مع الفلترة)
 ============================================================ */
 exports.getHistory = async (req, res) => {
   try {
@@ -127,6 +175,7 @@ exports.getHistory = async (req, res) => {
       page = 1,
       limit = 10,
     } = req.query;
+
     let filter =
       req.user.role === "worker"
         ? { sectorId: req.user.assignedSector }
@@ -134,25 +183,40 @@ exports.getHistory = async (req, res) => {
 
     if (sectorId) filter.sectorId = sectorId;
     if (status) filter["analysis.status"] = status;
+
     if (startDate || endDate) {
-      filter.timestamp = {};
-      if (startDate) filter.timestamp.$gte = new Date(startDate);
-      if (endDate) filter.timestamp.$lte = new Date(endDate);
+      filter.createdAt = {};
+      if (startDate) filter.createdAt.$gte = new Date(startDate);
+      if (endDate) filter.createdAt.$lte = new Date(endDate);
     }
 
     const history = await SensorData.find(filter)
-      .sort({ timestamp: -1 })
+      .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(Number(limit))
-      .populate("sectorId", "name cropType");
+      .populate("sectorId", "name cropType")
+      .lean();
 
     const total = await SensorData.countDocuments(filter);
+
+    const formattedHistory = history.map((item) => ({
+      _id: item._id,
+      timestamp: item.createdAt,
+      sector: item.sectorId,
+      readings: {
+        air: item.air,
+        soil: item.soil,
+        light: item.light,
+      },
+      analysis: item.analysis,
+    }));
 
     res.status(200).json({
       success: true,
       totalRecords: total,
       totalPages: Math.ceil(total / limit),
-      data: history,
+      currentPage: Number(page),
+      data: formattedHistory,
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -160,7 +224,7 @@ exports.getHistory = async (req, res) => {
 };
 
 /* ============================================================
-4️⃣ [جديد] GET ANALYTICS (تحليلات الأداء اليومي)
+4️⃣ GET ANALYTICS (تحليلات الأداء اليومي)
 ============================================================ */
 exports.getAnalytics = async (req, res) => {
   try {
@@ -172,49 +236,52 @@ exports.getAnalytics = async (req, res) => {
         .json({ success: false, message: "يجب تحديد معرف القطاع" });
     }
 
-    // 1. حساب بداية اليوم (الساعة 00:00:00) ونهاية اليوم (23:59:59)
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
-
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 59, 999);
-
-    // 2. التحويل لـ ObjectId للتأكد إن الماتش شغال صح
-    const sectorObjectId = new mongoose.Types.ObjectId(sectorId);
 
     const analytics = await SensorData.aggregate([
       {
         $match: {
-          sectorId: sectorObjectId,
-          createdAt: { $gte: startOfDay, $lte: endOfDay }, // البحث في نطاق اليوم بالكامل
+          sectorId: new mongoose.Types.ObjectId(sectorId),
+          createdAt: { $gte: startOfDay, $lte: endOfDay },
         },
       },
       {
         $group: {
           _id: null,
-          maxTemp: { $max: "$air.temperature" },
-          minTemp: { $min: "$air.temperature" },
-          avgMoisture: { $avg: "$soil.moisture" },
+          maxAirTemp: { $max: "$air.temperature" },
+          minAirTemp: { $min: "$air.temperature" },
+          avgAirHum: { $avg: "$air.humidity" },
+          maxSoilTemp: { $max: "$soil.temperature" },
+          avgSoilMoist: { $avg: "$soil.moisture" },
           readingsCount: { $sum: 1 },
         },
       },
       {
         $project: {
-          _id: 0, // عشان نشيل الـ null اللي بتظهر
-          maxTemp: { $round: ["$maxTemp", 1] }, // تقريب الأرقام لخانة واحدة
-          minTemp: { $round: ["$minTemp", 1] },
-          avgMoisture: { $round: ["$avgMoisture", 1] },
-          readingsCount: 1,
+          _id: 0,
+          air: {
+            maxTemp: { $round: ["$maxAirTemp", 1] },
+            minTemp: { $round: ["$minAirTemp", 1] },
+            avgHumidity: { $round: ["$avgAirHum", 1] },
+          },
+          soil: {
+            maxTemp: { $round: ["$maxSoilTemp", 1] },
+            avgMoisture: { $round: ["$avgSoilMoist", 1] },
+          },
+          totalReadings: "$readingsCount",
         },
       },
     ]);
 
     res.status(200).json({
       success: true,
-      analytics:
+      data:
         analytics.length > 0
           ? analytics[0]
-          : { message: "لا توجد قراءات لهذا القطاع اليوم" },
+          : { message: "لا توجد قراءات مسجلة اليوم" },
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

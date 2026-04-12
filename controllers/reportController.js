@@ -13,29 +13,28 @@ exports.getSectorStatsReport = async (req, res) => {
 
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - parseInt(days));
-    startDate.setHours(0, 0, 0, 0); // نبدأ من أول اليوم
+    startDate.setHours(0, 0, 0, 0);
 
     const report = await SensorData.aggregate([
       {
         $match: {
+          // ✅ تأكدنا إن الـ ID بيتحول لـ ObjectId صح
           sectorId: new mongoose.Types.ObjectId(sectorId),
-          // التعديل هنا: نستخدم createdAt بدل timestamp
           createdAt: { $gte: startDate },
         },
       },
       {
         $group: {
           _id: {
-            // التعديل هنا: استخراج التاريخ من createdAt
             $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
           },
           avgTemp: { $avg: "$air.temperature" },
           avgMoisture: { $avg: "$soil.moisture" },
           avgHumidity: { $avg: "$air.humidity" },
-          // نعد أي حالة مش Healthy عشان تبان كـ Alert
           alertsCount: {
             $sum: {
               $cond: [
+                // ✅ تعديل الـ $in لتكون متوافقة مع الـ Aggregation
                 {
                   $in: ["$analysis.status", ["Critical", "Warning", "Danger"]],
                 },
@@ -46,7 +45,17 @@ exports.getSectorStatsReport = async (req, res) => {
           },
         },
       },
-      { $sort: { _id: 1 } }, // ترتيب الأيام (السبت، الأحد، الاثنين...)
+      // ✅ تقريب الأرقام العشرية عشان المنظر في الداشبورد يبقى نظيف
+      {
+        $project: {
+          _id: 1,
+          avgTemp: { $round: ["$avgTemp", 1] },
+          avgMoisture: { $round: ["$avgMoisture", 1] },
+          avgHumidity: { $round: ["$avgHumidity", 1] },
+          alertsCount: 1,
+        },
+      },
+      { $sort: { _id: 1 } },
     ]);
 
     res.status(200).json({
@@ -59,6 +68,7 @@ exports.getSectorStatsReport = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
+
 exports.exportToCSV = async (req, res) => {
   try {
     const { sectorId } = req.query;
@@ -69,49 +79,47 @@ exports.exportToCSV = async (req, res) => {
         .json({ success: false, message: "يجب تحديد معرف القطاع" });
     }
 
-    // بنجيب البيانات وبنرتبها من الأحدث للأقدم
-    const data = await SensorData.find({ sectorId })
-      .sort("-createdAt") // التعديل هنا: نستخدم createdAt
-      .limit(500); // زودنا الليميت شوية عشان التقرير يبقى محترم
+    // ✅ التعديل: التأكد من تحويل الـ String لـ ObjectId في الـ Find برضه لو واجهت مشاكل
+    const data = await SensorData.find({
+      sectorId: new mongoose.Types.ObjectId(sectorId),
+    })
+      .sort("-createdAt")
+      .limit(500);
 
     if (data.length === 0) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: "لا توجد بيانات لتصديرها لهذا القطاع",
-        });
+      return res.status(404).json({
+        success: false,
+        message: "لا توجد بيانات لتصديرها لهذا القطاع",
+      });
     }
 
-    // \ufeff ده الـ Byte Order Mark (BOM) عشان Excel يفهم إن الملف UTF-8 ويقرأ العربي صح
     let csv = "\ufeff";
     csv +=
       "التاريخ والوقت,درجة الحرارة,الرطوبة الجوية,رطوبة التربة,حالة النبات,التوصية\n";
 
     data.forEach((item) => {
-      // 1. استخراج التاريخ (التعديل الأساسي هنا)
+      // ✅ استخدام توقيت القاهرة أو توقيت محلي ثابت
       const date = item.createdAt
-        ? item.createdAt.toLocaleString("ar-EG")
+        ? item.createdAt.toLocaleString("ar-EG", { timeZone: "Africa/Cairo" })
         : "غير مسجل";
 
-      // 2. تجهيز البيانات (بنتأكد إن مفيش قيم ناقصة عشان الملف ميبوظش)
       const temp = item.air?.temperature ?? "N/A";
       const hum = item.air?.humidity ?? "N/A";
       const soilMoist = item.soil?.moisture ?? "N/A";
       const status = item.analysis?.status ?? "N/A";
+
+      // تنظيف التوصية من أي فواصل قد تبوظ ملف الـ CSV
       const recommendation = item.analysis?.recommendation
-        ? item.analysis.recommendation.replace(/,/g, "-")
+        ? item.analysis.recommendation.replace(/,/g, " - ")
         : "لا يوجد";
 
-      // إضافة السطر للـ CSV
       csv += `${date},${temp},${hum},${soilMoist},${status},${recommendation}\n`;
     });
 
-    // إرسال الملف للمتصفح أو Postman
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=sector-report-${Date.now()}.csv`,
+      `attachment; filename=Report-${sectorId}-${Date.now()}.csv`,
     );
 
     return res.status(200).send(csv);

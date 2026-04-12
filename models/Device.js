@@ -18,14 +18,18 @@ const deviceSchema = new mongoose.Schema(
     lastPing: Date, // آخر وقت الجهاز بعت فيه داتا
 
     // الجهاز ده محطوط في أنهي قطاع؟
-    sector: {
+    sectorId: {
+      // خليناها sectorId بدل sector للتوحيد
       type: mongoose.Schema.Types.ObjectId,
       ref: "Sector",
+      required: true, // الجهاز لازم يكون مربوط بقطاع عشان الداتا تتسجل صح
     },
 
-    owner: {
+    ownerId: {
+      // خليناها ownerId بدل owner
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
+      required: true,
     },
   },
   { timestamps: true },

@@ -4,6 +4,7 @@ const {
   createSector,
   getSectors,
   deleteSector,
+  updateSector,
   getAllSectorsAdmin,
 } = require("../controllers/sectorController");
 const { protect, authorize } = require("../middleware/authMiddleware");
@@ -16,5 +17,6 @@ router.get("/", authorize("owner"), getSectors);
 // المالك فقط هو من ينشئ أو يحذف
 router.post("/", authorize("owner"), createSector);
 router.delete("/:id", authorize("owner"), deleteSector);
+router.put("/:id", authorize("owner"), updateSector);
 
 module.exports = router;
