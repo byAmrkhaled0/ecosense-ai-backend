@@ -1,10 +1,13 @@
 require("dotenv").config();
 const express = require("express");
+const http = require("http");
+const { Server } = require("socket.io");
 const cors = require("cors");
 const path = require("path");
 const connectDB = require("./config/db");
 const passport = require("passport");
-require("./config/passport")(passport);
+const cookieParser = require("cookie-parser");
+
 // 🛡️ Security Libraries
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
@@ -13,27 +16,63 @@ const hpp = require("hpp");
 const mongoSanitize = require("express-mongo-sanitize");
 const morgan = require("morgan");
 
-// Swagger (اختياري لو مفعله)
+// Swagger
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./swagger");
 
+// 1️⃣ إنشاء تطبيق Express أولاً
 const app = express();
 
-// ============================
-// 🔌 Connect Database
-// ============================
+app.use(cookieParser());
+
+// 2️⃣ إنشاء سيرفر HTTP وربطه بـ Express
+const server = http.createServer(app);
+
+// 3️⃣ إعداد Socket.io
+const io = new Server(server, {
+  cors: {
+    origin: (origin, callback) => callback(null, true),
+    credentials: true,
+  },
+});
+
+// تخزين الـ IO في الـ app لاستخدامه في الـ Controllers
+app.set("io", io);
+
+// تعريف منطق Socket.io
+io.on("connection", (socket) => {
+  console.log("🟢 A user connected: ", socket.id);
+
+  socket.on("join", (userId) => {
+    socket.join(userId);
+    console.log(`👤 User ${userId} joined their private room`);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("🔴 User disconnected");
+  });
+});
+
+// 🔌 الاتصال بقاعدة البيانات
 connectDB();
+
+// 🛡️ إعدادات Passport
+require("./config/passport")(passport);
+app.use(passport.initialize());
 
 // ============================
 // 🛡️ Security Middlewares
 // ============================
-app.use(helmet()); // حماية الـ Headers
-app.use(hpp()); // منع HTTP Parameter Pollution
-app.use(mongoSanitize()); // منع هجمات NoSQL Injection
-app.use(cors()); // السماح بالاتصال من الـ Flutter / Frontend
-app.use(morgan("dev")); // لطباعة الـ Logs في الـ Console أثناء التطوير
-
-app.use(passport.initialize());
+app.use(helmet());
+app.use(hpp());
+app.use(mongoSanitize());
+app.use(
+  cors({
+    origin: (origin, callback) => callback(null, true), // بيوافق على أي Origin باعت الطلب
+    credentials: true,
+  }),
+);
+app.use(morgan("dev"));
 
 // 🧹 HTML Sanitization (XSS Prevention)
 app.use((req, res, next) => {
@@ -50,7 +89,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Rate Limiter — حد أقصى 100 طلب كل 15 دقيقة لكل IP
+// Rate Limiter
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
@@ -65,7 +104,6 @@ app.use(express.urlencoded({ extended: true }));
 // ============================
 // 📂 Static Folders
 // ============================
-// جعل مجلد الصور متاحاً للوصول عبر الرابط
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // ============================
@@ -81,32 +119,18 @@ app.use(
 );
 
 // ============================
-// 🛤️ Routes Mapping (الربط النهائي)
+// 🛤️ Routes Mapping
 // ============================
-
-// 1. الأساسيات (التشغيل)
 app.get("/", (req, res) => res.send("EcoSense Backend Running Securely 🔐🚀"));
 
-// 2. مستخدمين، عمال، وتوثيق (Auth & Users)
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/users", require("./routes/userRoutes"));
-
-// 3. إدارة المزرعة (Sectors & Devices)
 app.use("/api/sectors", require("./routes/sectorRoutes"));
 app.use("/api/devices", require("./routes/deviceRoutes"));
-
-// 4. البيانات والتحليل (Sensors & AI)
 app.use("/api/sensors", require("./routes/sensorRoutes"));
-
-// 5. الصور (Plant Disease Detection)
 app.use("/api/images", require("./routes/imageRoutes"));
-
-// 6. لوحة التحكم والتنبيهات (Main Dashboard & Notifications)
 app.use("/api/main", require("./routes/mainRoutes"));
-
 app.use("/api/admin", require("./routes/adminRoutes"));
-
-// تفعيل الروابط
 app.use("/api/reports", require("./routes/reportRoutes"));
 
 // ============================
@@ -131,15 +155,16 @@ app.use((err, req, res, next) => {
 });
 
 // ============================
-// 🚀 Start Server
+// 🚀 Start Server (استخدام server.listen وليس app.listen)
 // ============================
 const PORT = process.env.PORT || 6000;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`
     *****************************************
     🌐 EcoSense Secure Server is LIVE
     🚀 Port: ${PORT}
     🛡️ Mode: ${process.env.NODE_ENV || "development"}
+    📡 Socket.io: Enabled
     *****************************************
   `);
 });

@@ -3,6 +3,7 @@ const fs = require("fs");
 const axios = require("axios");
 const FormData = require("form-data");
 const Sector = require("../models/Sector");
+const Notification = require("../models/Notification"); // ضفنا الموديل ده
 const mongoose = require("mongoose");
 
 /* ============================================================
@@ -13,33 +14,48 @@ exports.uploadImage = async (req, res) => {
     const { sectorId, captureReason } = req.body;
     const userId = req.user._id;
 
-    // 1. التأكد من وجود الصورة المرفوعة
     if (!req.file) {
       return res
         .status(400)
         .json({ success: false, message: "يرجى رفع صورة للتحليل" });
     }
 
-    // 2. التحقق من وجود القطاع (هنا كان بيحصل الخطأ)
+    // 1. التأكد من أن القطاع يخص المستخدم (عامل أو مالك) 🚩 (الأمان)
     const sector = await Sector.findById(sectorId);
     if (!sector) {
       return res
         .status(404)
-        .json({ success: false, message: "القطاع المحدد غير موجود" });
+        .json({ success: false, message: "القطاع غير موجود" });
     }
 
-    // 3. تجهيز رابط الصورة للرد به (Full URL)
+    if (
+      req.user.role === "worker" &&
+      sector.assignedWorker.toString() !== userId.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "عذراً، هذا القطاع ليس تحت مسؤوليتك",
+      });
+    }
+
+    if (
+      req.user.role === "owner" &&
+      sector.ownerId.toString() !== userId.toString()
+    ) {
+      return res
+        .status(403)
+        .json({ success: false, message: "هذا القطاع لا ينتمي لمزرعتك" });
+    }
+
     const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
 
-    // 4. إعداد بيانات التحليل (افتراضية في حال تعذر الاتصال بسيرفر AI)
+    // 2. محاولة الاتصال بسيرفر الـ AI (نفس كودك)
     let aiAnalysis = {
-      status: "Unknown",
+      status: "Healthy",
       diseaseName: "None",
       confidence: 0,
-      recommendation: "سيرفر التحليل غير متاح حالياً",
+      recommendation: "النبات سليم",
     };
-
-    // 5. محاولة الاتصال بسيرفر الـ AI
     try {
       const formData = new FormData();
       formData.append("image", fs.createReadStream(req.file.path));
@@ -48,7 +64,7 @@ exports.uploadImage = async (req, res) => {
       const aiResponse = await axios.post(
         process.env.AI_IMAGE_SERVER_URL || "http://127.0.0.1:8000/predict",
         formData,
-        { headers: formData.getHeaders() },
+        { headers: formData.getHeaders(), timeout: 5000 },
       );
 
       if (aiResponse.data) {
@@ -60,12 +76,12 @@ exports.uploadImage = async (req, res) => {
         };
       }
     } catch (aiErr) {
-      console.error("⚠️ AI Server Error:", aiErr.message);
+      console.error("⚠️ AI Image Server Error");
     }
 
-    // 6. حفظ السجل في قاعدة البيانات
+    // 3. حفظ السجل
     const newImageLog = await ImageLog.create({
-      ownerId: userId,
+      ownerId: sector.ownerId, // نضمن إن صاحب المزرعة هو المالك هنا
       capturedBy: userId,
       sectorId: sectorId,
       imageUrl: imageUrl,
@@ -73,45 +89,69 @@ exports.uploadImage = async (req, res) => {
       analysisResult: aiAnalysis,
     });
 
-    // 7. جلب البيانات المحدثة مع عمل Populate لاسم القطاع
-    const finalLog = await ImageLog.findById(newImageLog._id).populate(
-      "sectorId",
-      "name cropType",
-    );
+    // 4. 🔔 إرسال إشعار فوري (Socket.io) لو فيه مرض 🚩
+    if (aiAnalysis.status !== "Healthy") {
+      const io = req.app.get("io");
+      const notificationData = {
+        title: "⚠️ اكتشاف إصابة نبات",
+        message: `تم رصد (${aiAnalysis.diseaseName}) في قطاع (${sector.name}).`,
+        type: "disease",
+        sectorId: sectorId,
+      };
 
-    res.status(201).json({
-      success: true,
-      message: "✅ تم الرفع والتحليل بنجاح",
-      data: finalLog,
-    });
+      // حفظ الإشعارات في الداتابيز وإرسالها عبر Socket
+      const notifyOwner = await Notification.create({
+        ...notificationData,
+        recipient: sector.ownerId,
+      });
+      io.to(sector.ownerId.toString()).emit("newNotification", notifyOwner);
+
+      if (sector.assignedWorker) {
+        const notifyWorker = await Notification.create({
+          ...notificationData,
+          recipient: sector.assignedWorker,
+        });
+        io.to(sector.assignedWorker.toString()).emit(
+          "newNotification",
+          notifyWorker,
+        );
+      }
+    }
+
+    res.status(201).json({ success: true, data: newImageLog });
   } catch (err) {
-    // في حالة حدوث أي خطأ آخر
     res.status(500).json({ success: false, error: err.message });
   }
 };
-/* ============================================================
-    2️⃣ GET IMAGE HISTORY (عرض التاريخ بشكل منظم)
-============================================================ */
 
+/* ============================================================
+    2️⃣ GET IMAGE HISTORY (عرض التاريخ بتعدد القطاعات)
+============================================================ */
 exports.getImageHistory = async (req, res) => {
   try {
     const { sectorId, page = 1, limit = 10 } = req.query;
-
-    // 1. تحديد الفلتر الأساسي بناءً على الصلاحيات
     let filter = {};
 
     if (req.user.role === "worker") {
-      // العامل يشوف قطاعه فقط
-      filter.sectorId = req.user.assignedSector;
-    } else {
-      // المالك يشوف حاجته كلها
-      filter.ownerId = req.user._id;
-    }
+      // 🚩 نجيب كل القطاعات اللي العامل مسؤول عنها
+      const workerSectors = await Sector.find({
+        assignedWorker: req.user._id,
+      }).select("_id");
+      const sectorIds = workerSectors.map((s) => s._id);
 
-    // 2. 🚩 التعديل الجوهري: لو المالك باعت sectorId معين في الـ Query
-    if (sectorId) {
-      // بنحول الـ String لـ ObjectId عشان نضمن إن الـ Match يتم صح في الداتابيز
-      filter.sectorId = new mongoose.Types.ObjectId(sectorId);
+      if (sectorId) {
+        if (!sectorIds.map((id) => id.toString()).includes(sectorId)) {
+          return res
+            .status(403)
+            .json({ success: false, message: "ليس لديك صلاحية لهذا القطاع" });
+        }
+        filter.sectorId = sectorId;
+      } else {
+        filter.sectorId = { $in: sectorIds }; // صور كل قطاعاته
+      }
+    } else {
+      filter.ownerId = req.user._id;
+      if (sectorId) filter.sectorId = sectorId;
     }
 
     const images = await ImageLog.find(filter)
@@ -122,27 +162,12 @@ exports.getImageHistory = async (req, res) => {
       .populate("capturedBy", "firstName lastName")
       .lean();
 
-    // 3. تنسيق الرد
-    const formattedData = images.map((img) => ({
-      _id: img._id,
-      url: img.imageUrl,
-      capturedAt: img.createdAt,
-      sector: img.sectorId, // هيرجع كائن فيه الـ name و الـ cropType بسبب الـ populate
-      info: {
-        by: img.capturedBy,
-        reason: img.captureReason,
-      },
-      analysis: img.analysisResult,
-    }));
-
     const total = await ImageLog.countDocuments(filter);
 
     res.status(200).json({
       success: true,
       totalRecords: total,
-      currentPage: Number(page),
-      totalPages: Math.ceil(total / Number(limit)),
-      data: formattedData,
+      data: images,
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

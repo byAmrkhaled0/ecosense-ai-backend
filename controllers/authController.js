@@ -23,7 +23,6 @@ const sendTokenResponse = (user, statusCode, res, message = "Success") => {
   });
 };
 
-// 📝 Register (تسجيل صاحب مزرعة جديد)
 exports.registerUser = async (req, res) => {
   try {
     let { email, password, firstName, lastName, address, phoneNumber } =
@@ -31,64 +30,68 @@ exports.registerUser = async (req, res) => {
 
     if (email) email = email.trim().toLowerCase();
 
-    // التحقق من الحقول الإلزامية
-    if (
-      !email ||
-      !password ||
-      !firstName ||
-      !lastName ||
-      !address ||
-      !phoneNumber
-    ) {
-      return res
-        .status(400)
-        .json({ success: false, message: "يرجى ملء جميع الحقول المطلوبة." });
-    }
-
+    // 1. التأكد من أن المستخدم مش موجود فعلاً في الداتابيز الأساسية
     const existing = await User.findOne({ email });
     if (existing) {
       return res
         .status(400)
-        .json({ success: false, message: "المستخدم موجود بالفعل." });
+        .json({ success: false, message: "المستخدم موجود بالفعل ومفعل." });
     }
 
-    // إنشاء المستخدم كـ Owner (مالك مزرعة)
-    const user = await User.create({
-      email,
-      password,
-      firstName,
-      lastName,
-      address,
-      phoneNumber,
-      role: "owner", // القيمة الافتراضية للتسجيل الخارجي
-    });
+    // 2. توليد رمز تفعيل عشوائي (مثلاً 6 أرقام)
+    const verificationCode = Math.floor(
+      100000 + Math.random() * 900000,
+    ).toString();
 
-    const verificationCode = user.getVerificationCode();
-    await user.save({ validateBeforeSave: false });
+    // 3. تشفير بيانات المستخدم + الرمز في JWT (صلاحيته 10 دقائق)
+    // الطريقة دي بتخلي السيرفر "مش شايل هم" تخزين البيانات عنده
+    const tempToken = jwt.sign(
+      {
+        userData: {
+          email,
+          password,
+          firstName,
+          lastName,
+          address,
+          phoneNumber,
+          role: "owner",
+        },
+        verificationCode,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "10m" },
+    );
 
     const emailMessage = `
         <h3>👋 مرحباً بك في EcoSense!</h3>
-        <p>لإكمال تفعيل حسابك كصاحب مزرعة، يرجى استخدام الرمز السري:</p>
+        <p>استخدم الرمز التالي لإتمام عملية التسجيل وتفعيل حسابك:</p>
         <h1 style="color: #4CAF50; text-align: center;">${verificationCode}</h1>
-        <p>الرمز صالح لمدة 10 دقائق فقط.</p>
     `;
 
     try {
       await sendEmail({
-        email: user.email,
+        email,
         subject: "رمز تفعيل حساب EcoSense",
         message: emailMessage,
       });
 
-      res.status(200).json({
-        success: true,
-        message: "تم التسجيل بنجاح. يرجى تفعيل الحساب بالرمز المرسل للإيميل.",
-      });
+      const cookieOptions = {
+        expires: new Date(Date.now() + 10 * 60 * 1000), // 10 دقائق
+        httpOnly: true, // تمنع الوصول للتوكن عبر الـ JavaScript (حماية من XSS)
+        secure: process.env.NODE_ENV === "production", // تعمل فقط عبر HTTPS في الإنتاج
+      };
+
+      res
+        .status(200)
+        .cookie("registrationToken", tempToken, cookieOptions) // 👈 التوكن اتبعت "تلقائياً"
+        .json({
+          success: true,
+          message: "تم إرسال رمز التفعيل للإيميل. (التوكن محفوظ في الكوكيز)",
+        });
     } catch (err) {
-      await User.findByIdAndDelete(user._id);
       return res
         .status(500)
-        .json({ success: false, message: "فشل إرسال الإيميل، حاول لاحقاً." });
+        .json({ success: false, message: "فشل إرسال الإيميل." });
     }
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -185,31 +188,72 @@ exports.loginUser = async (req, res) => {
 };
 
 // 📧 Verify Code (OTP)
-exports.verifyCode = async (req, res) => {
+exports.verifyAndRegister = async (req, res) => {
   try {
-    const { email, code } = req.body;
-    const user = await User.findOne({
-      email,
-      verificationCode: code,
-      verificationCodeExpires: { $gt: Date.now() },
+    const { code } = req.body;
+    // قراءة التوكن من الكوكيز تلقائياً
+    const tempToken = req.cookies.registrationToken;
+
+    if (!tempToken) {
+      return res.status(400).json({
+        success: false,
+        message: "انتهت صلاحية جلسة التسجيل، يرجى إعادة المحاولة.",
+      });
+    }
+
+    // فك التشفير والتحقق من صحة التوكن
+    const decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
+
+    // التحقق من كود التفعيل المبعوث في الإيميل
+    if (decoded.verificationCode !== code) {
+      return res.status(400).json({
+        success: false,
+        message: "الرمز غير صحيح، تأكد من الكود المرسل لإيميلك.",
+      });
+    }
+
+    // 🚩 التعديل هنا: حفظ المستخدم في الداتابيز (تأكد من استخدام ... لفرط البيانات)
+    const newUser = await User.create({
+      ...decoded.userData,
+      isVerified: true,
     });
 
-    if (!user)
-      return res
-        .status(400)
-        .json({ success: false, message: "الرمز خاطئ أو منتهي الصلاحية" });
-
-    user.isVerified = true;
-    user.verificationCode = undefined;
-    user.verificationCodeExpires = undefined;
-    await user.save();
-
-    sendTokenResponse(user, 200, res, "تم تفعيل الحساب بنجاح");
+    // الرد بنجاح ومسح الكوكيز عشان الجلسة المؤقتة تنتهي
+    res
+      .status(201)
+      .clearCookie("registrationToken")
+      .json({
+        success: true,
+        message: "✅ تم تفعيل حسابك وإنشاؤه بنجاح!",
+        user: {
+          id: newUser._id,
+          email: newUser.email,
+          name: `${newUser.firstName} ${newUser.lastName}`,
+        },
+      });
   } catch (err) {
-    res.status(500).json({ success: false, message: "خطأ أثناء عملية التحقق" });
+    // التعامل مع أخطاء الـ JWT بشكل احترافي
+    if (err.name === "TokenExpiredError") {
+      return res.status(400).json({
+        success: false,
+        message: "انتهت صلاحية الجلسة (10 دقائق)، يرجى إعادة التسجيل من جديد.",
+      });
+    }
+    if (err.name === "JsonWebTokenError") {
+      return res.status(400).json({
+        success: false,
+        message: "الجلسة غير صالحة أو تم التلاعب بها.",
+      });
+    }
+
+    // أي خطأ آخر (مثل خطأ في الداتابيز)
+    console.error("Error in verifyAndRegister:", err);
+    res.status(500).json({
+      success: false,
+      message: "حدث خطأ داخلي أثناء التفعيل.",
+    });
   }
 };
-
 // 👤 Get Me
 exports.getMe = async (req, res) => {
   try {

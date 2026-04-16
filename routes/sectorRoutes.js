@@ -5,7 +5,6 @@ const {
   getSectors,
   deleteSector,
   updateSector,
-  getAllSectorsAdmin,
 } = require("../controllers/sectorController");
 const { protect, authorize } = require("../middleware/authMiddleware");
 

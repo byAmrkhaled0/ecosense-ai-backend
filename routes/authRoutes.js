@@ -4,7 +4,7 @@ const passport = require("passport"); // ✅ لازم تعمل import لباسب
 const {
   registerUser,
   loginUser,
-  verifyCode,
+  verifyAndRegister,
   getMe,
   nativeGoogleAuth,
   socialAuthSuccess, // ✅ لازم تضيفها هنا عشان الـ Route يشوفها
@@ -16,7 +16,7 @@ const { protect } = require("../middleware/authMiddleware");
 // --- المسارات العادية ---
 router.post("/register", registerUser);
 router.post("/login", loginUser);
-router.post("/verify-otp", verifyCode);
+router.post("/verify-otp", verifyAndRegister);
 router.post("/google-auth", nativeGoogleAuth);
 router.get(
   "/google",
