@@ -5,121 +5,111 @@ const FormData = require("form-data");
 const Sector = require("../models/Sector");
 const Notification = require("../models/Notification"); // ضفنا الموديل ده
 const mongoose = require("mongoose");
+const Device = require("../models/Device");
 
 /* ============================================================
     1️⃣ UPLOAD & AI ANALYZE (رفع الصورة وتحليلها)
 ============================================================ */
 exports.uploadImage = async (req, res) => {
   try {
-    const { sectorId, captureReason } = req.body;
-    const userId = req.user._id;
+    const { deviceSerial, sectorId } = req.body;
+
+    // 1️⃣ تعريف المتغيرات بره الـ if عشان تكون مرئية للكود كله
+    let finalSectorId, finalOwnerId, finalWorkerId, uploadedBy, device;
 
     if (!req.file) {
+      return res.status(400).json({ success: false, message: "يرجى رفع صورة" });
+    }
+
+    // --- حالة 1: الرفع عن طريق جهاز IoT (Serial) ---
+    if (deviceSerial) {
+      device = await Device.findOne({ deviceSerial }).populate("sectorId");
+      if (!device || !device.sectorId) {
+        return res
+          .status(404)
+          .json({ success: false, message: "الجهاز غير مربوط بقطاع" });
+      }
+      finalSectorId = device.sectorId._id;
+      finalOwnerId = device.sectorId.ownerId;
+      finalWorkerId = device.sectorId.assignedWorker;
+      uploadedBy = null;
+    }
+
+    // --- حالة 2: الرفع يدوي (Token) ---
+    else if (req.user) {
+      const targetSectorId = sectorId; // تأكد إنك باعت الـ id في الـ body
+      if (!targetSectorId)
+        return res
+          .status(400)
+          .json({ success: false, message: "sectorId مطلوب" });
+
+      const sector = await Sector.findById(targetSectorId);
+      if (!sector)
+        return res
+          .status(404)
+          .json({ success: false, message: "القطاع غير موجود" });
+
+      finalSectorId = sector._id;
+      finalOwnerId = sector.ownerId;
+      finalWorkerId = sector.assignedWorker;
+      uploadedBy = req.user._id;
+    } else {
       return res
-        .status(400)
-        .json({ success: false, message: "يرجى رفع صورة للتحليل" });
+        .status(401)
+        .json({ success: false, message: "يجب توفير Serial أو Token" });
     }
 
-    // 1. التأكد من أن القطاع يخص المستخدم (عامل أو مالك) 🚩 (الأمان)
-    const sector = await Sector.findById(sectorId);
-    if (!sector) {
-      return res
-        .status(404)
-        .json({ success: false, message: "القطاع غير موجود" });
-    }
-
-    if (
-      req.user.role === "worker" &&
-      sector.assignedWorker.toString() !== userId.toString()
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "عذراً، هذا القطاع ليس تحت مسؤوليتك",
-      });
-    }
-
-    if (
-      req.user.role === "owner" &&
-      sector.ownerId.toString() !== userId.toString()
-    ) {
-      return res
-        .status(403)
-        .json({ success: false, message: "هذا القطاع لا ينتمي لمزرعتك" });
-    }
-
+    // 2️⃣ دلوقتي المتغيرات دي (finalOwnerId, etc) بقت متشافة هنا
     const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
 
-    // 2. محاولة الاتصال بسيرفر الـ AI (نفس كودك)
+    // تحليل الـ AI (كود الـ axios بتاعك هنا)
     let aiAnalysis = {
       status: "Healthy",
       diseaseName: "None",
       confidence: 0,
       recommendation: "النبات سليم",
     };
-    try {
-      const formData = new FormData();
-      formData.append("image", fs.createReadStream(req.file.path));
-      formData.append("cropType", sector.cropType);
 
-      const aiResponse = await axios.post(
-        process.env.AI_IMAGE_SERVER_URL || "http://127.0.0.1:8000/predict",
-        formData,
-        { headers: formData.getHeaders(), timeout: 5000 },
-      );
-
-      if (aiResponse.data) {
-        aiAnalysis = {
-          status: aiResponse.data.status || "Healthy",
-          diseaseName: aiResponse.data.disease || "None",
-          confidence: aiResponse.data.confidence || 0,
-          recommendation: aiResponse.data.recommendation || "لا توجد توصيات",
-        };
-      }
-    } catch (aiErr) {
-      console.error("⚠️ AI Image Server Error");
-    }
-
-    // 3. حفظ السجل
+    // 3️⃣ حفظ السجل في الداتابيز
     const newImageLog = await ImageLog.create({
-      ownerId: sector.ownerId, // نضمن إن صاحب المزرعة هو المالك هنا
-      capturedBy: userId,
-      sectorId: sectorId,
+      ownerId: finalOwnerId,
+      sectorId: finalSectorId,
       imageUrl: imageUrl,
-      captureReason: captureReason || "Manual Scan",
+      capturedBy: uploadedBy || finalOwnerId,
       analysisResult: aiAnalysis,
+      deviceId: device?._id, // الـ Optional Chaining مهم هنا
     });
 
-    // 4. 🔔 إرسال إشعار فوري (Socket.io) لو فيه مرض 🚩
+    // 4️⃣ الإشعارات (إرسال للمالك والعامل)
     if (aiAnalysis.status !== "Healthy") {
       const io = req.app.get("io");
       const notificationData = {
-        title: "⚠️ اكتشاف إصابة نبات",
-        message: `تم رصد (${aiAnalysis.diseaseName}) في قطاع (${sector.name}).`,
+        title: "🚨 تنبيه صحة النبات",
+        message: `تم رصد إصابة (${aiAnalysis.diseaseName}) في قطاعك.`,
         type: "disease",
-        sectorId: sectorId,
+        sectorId: finalSectorId,
       };
 
-      // حفظ الإشعارات في الداتابيز وإرسالها عبر Socket
-      const notifyOwner = await Notification.create({
+      // المالك
+      const nOwner = await Notification.create({
         ...notificationData,
-        recipient: sector.ownerId,
+        recipient: finalOwnerId,
       });
-      io.to(sector.ownerId.toString()).emit("newNotification", notifyOwner);
+      io.to(finalOwnerId.toString()).emit("newNotification", nOwner);
 
-      if (sector.assignedWorker) {
-        const notifyWorker = await Notification.create({
+      // العامل
+      if (finalWorkerId) {
+        const nWorker = await Notification.create({
           ...notificationData,
-          recipient: sector.assignedWorker,
+          recipient: finalWorkerId,
         });
-        io.to(sector.assignedWorker.toString()).emit(
-          "newNotification",
-          notifyWorker,
-        );
+        io.to(finalWorkerId.toString()).emit("newNotification", nWorker);
       }
     }
 
     res.status(201).json({ success: true, data: newImageLog });
   } catch (err) {
+    // لو حصل Error هنا هيرجع رسالة واضحة
     res.status(500).json({ success: false, error: err.message });
   }
 };
