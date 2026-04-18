@@ -2,10 +2,11 @@ const express = require("express");
 const router = express.Router();
 const sensorController = require("../controllers/sensorController");
 const { protect, restrictTo } = require("../middleware/authMiddleware");
+const upload = require("../config/upload");
 
-// 1. استقبال البيانات من الـ ESP32 (دي مش محتاجة Token لو الجهاز بيبعت سريال بس)
-// ملاحظة: لو مأمنها بـ API Key يكون أحسن، بس حالياً هنخليها مفتوحة للجهاز
-router.post("/upload", sensorController.uploadData);
+// 1. تعديل السطر ده عشان يستقبل form-data
+// استخدم upload.none() لو الداتا عبارة عن نصوص بس (حرارة، رطوبة، سيريال)
+router.post("/upload", upload.none(), sensorController.uploadData);
 
 // --- كل الروابط اللي جاية محتاجة تسجيل دخول (protect) ---
 router.use(protect);

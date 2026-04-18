@@ -10,7 +10,7 @@ const mongoose = require("mongoose");
 ============================================================ */
 exports.uploadData = async (req, res) => {
   try {
-    const { deviceSerial, temp, hum, soilMoist, soilTemp, light } = req.body;
+    const { deviceSerial, temp, hum, Soil, soilTemp, light } = req.body;
 
     if (!deviceSerial) {
       return res
@@ -45,7 +45,7 @@ exports.uploadData = async (req, res) => {
           cropType: sector.cropType || "general",
           temperature: temp,
           humidity: hum,
-          soilMoisture: soilMoist,
+          soilMoisture: Soil,
           soilTemp: soilTemp,
           light: light,
         },
@@ -69,7 +69,7 @@ exports.uploadData = async (req, res) => {
       sectorId: finalSectorId,
       deviceId: device._id,
       air: { temperature: temp, humidity: hum },
-      soil: { moisture: soilMoist, temperature: soilTemp },
+      soil: { moisture: Soil, temperature: soilTemp },
       light: String(light),
       analysis: aiAnalysis,
     });
@@ -83,7 +83,7 @@ exports.uploadData = async (req, res) => {
     // 5. 🔔 نظام التنبيهات المطور (للمالك والعامل)
     const isCritical =
       temp > 45 ||
-      soilMoist < 10 ||
+      Soil < 10 ||
       aiAnalysis.status === "Danger" ||
       aiAnalysis.status === "Critical";
 
