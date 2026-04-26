@@ -1,0 +1,2321 @@
+[
+  {
+    "timestamp": "2026-04-19 02:24:03",
+    "request_type": "mobile_predict",
+    "input": {
+      "cropType": "Tomato",
+      "temperature": 39,
+      "humidity": 25,
+      "soilMoisture": 18,
+      "soilTemp": 34,
+      "light": "Low"
+    },
+    "result": {
+      "status": "High Stress",
+      "final_status": "High Stress",
+      "confidence": {
+        "Healthy": 0.007,
+        "High Stress": 0.947,
+        "Moderate Stress": 0.047
+      },
+      "alert": true,
+      "severity": "high",
+      "summary": "النبات في حالة حرجة، ويجب التدخل السريع لتفادي تدهور الحالة.",
+      "general_recommendation": "النبات في حالة حرجة! يجب التدخل فورًا بفحص رطوبة التربة والعناصر الغذائية ودرجة الحرارة وتحسين الظروف البيئية.",
+      "diagnosis": {
+        "primary_issue": "إجهاد مائي وحراري",
+        "secondary_issue": "احتمال ضعف في كفاءة التبريد أو الري",
+        "explanation": "تم رصد انخفاض في رطوبة التربة مع ارتفاع في درجة الحرارة."
+      },
+      "risk_factors": [
+        {
+          "code": "LOW_SOIL_MOISTURE",
+          "label": "انخفاض رطوبة التربة",
+          "severity": "high",
+          "value": 18.0,
+          "ideal_range": "30-70"
+        },
+        {
+          "code": "HIGH_TEMPERATURE",
+          "label": "ارتفاع درجة الحرارة",
+          "severity": "medium",
+          "value": 39.0,
+          "ideal_range": "20-35"
+        },
+        {
+          "code": "LOW_HUMIDITY",
+          "label": "انخفاض الرطوبة الجوية",
+          "severity": "medium",
+          "value": 25.0,
+          "ideal_range": "40-80"
+        },
+        {
+          "code": "HIGH_SOIL_TEMP",
+          "label": "ارتفاع حرارة التربة",
+          "severity": "medium",
+          "value": 34.0,
+          "ideal_range": "18-30"
+        },
+        {
+          "code": "LOW_LIGHT",
+          "label": "ضعف الإضاءة",
+          "severity": "medium",
+          "value": "Low",
+          "ideal_range": "Sufficient"
+        }
+      ],
+      "recommendations": [
+        "🚨 النبات (Tomato) في حالة حرجة ويحتاج تدخلًا فوريًا.",
+        "🌡️ درجة الحرارة مرتفعة؛ حسّن التهوية أو التبريد.",
+        "💧 رطوبة التربة منخفضة؛ زوّد الري تدريجيًا وراقب الاستجابة.",
+        "🌫️ الرطوبة الجوية منخفضة؛ قد يزيد ذلك من الإجهاد المائي.",
+        "🌱 حرارة التربة مرتفعة؛ راقب منطقة الجذور جيدًا.",
+        "☀️ الإضاءة ضعيفة؛ زوّد الضوء أو مدة التعرض."
+      ],
+      "actions": [
+        {
+          "priority": 1,
+          "code": "IRRIGATION_UP",
+          "title": "زيادة الري تدريجيًا",
+          "details": "رطوبة التربة أقل من النطاق المناسب."
+        },
+        {
+          "priority": 2,
+          "code": "COOLING_ON",
+          "title": "تحسين التهوية أو التبريد",
+          "details": "درجة الحرارة أعلى من النطاق المناسب."
+        },
+        {
+          "priority": 2,
+          "code": "ROOTZONE_COOL",
+          "title": "خفض حرارة منطقة الجذور",
+          "details": "حرارة التربة مرتفعة."
+        },
+        {
+          "priority": 3,
+          "code": "HUMIDITY_UP",
+          "title": "رفع الرطوبة عند الحاجة",
+          "details": "الرطوبة منخفضة وقد تزيد الإجهاد."
+        },
+        {
+          "priority": 3,
+          "code": "LIGHT_UP",
+          "title": "زيادة الإضاءة",
+          "details": "الإضاءة الحالية غير كافية للنمو."
+        }
+      ],
+      "monitoring": [
+        "إعادة فحص رطوبة التربة بعد التعديل في الري.",
+        "مراقبة درجة الحرارة خلال الساعات القادمة.",
+        "متابعة تحسن النمو بعد تعديل الإضاءة."
+      ],
+      "backend_flags": {
+        "needs_irrigation": true,
+        "needs_drainage_check": false,
+        "needs_cooling": true,
+        "needs_heating": false,
+        "needs_light_adjustment": true,
+        "needs_humidity_adjustment": true,
+        "needs_urgent_attention": true
+      },
+      "notification": {
+        "send": true,
+        "title": "🚨 تحذير: حالة حرجة",
+        "message": "إجهاد مائي وحراري - الإجراء الفوري: زيادة الري تدريجيًا",
+        "type": "critical"
+      },
+      "timestamp": "2026-04-19 02:24:03"
+    }
+  },
+  {
+    "timestamp": "2026-04-19 14:05:45",
+    "request_type": "mobile_predict",
+    "input": {
+      "cropType": "Tomato",
+      "temperature": 39,
+      "humidity": 25,
+      "soilMoisture": 18,
+      "soilTemp": 34,
+      "light": "Low"
+    },
+    "result": {
+      "status": "High Stress",
+      "final_status": "High Stress",
+      "confidence": {
+        "Healthy": 0.007,
+        "High Stress": 0.947,
+        "Moderate Stress": 0.047
+      },
+      "alert": true,
+      "severity": "high",
+      "summary": "النبات في حالة حرجة، ويجب التدخل السريع لتفادي تدهور الحالة.",
+      "general_recommendation": "النبات في حالة حرجة! يجب التدخل فورًا بفحص رطوبة التربة والعناصر الغذائية ودرجة الحرارة وتحسين الظروف البيئية.",
+      "diagnosis": {
+        "primary_issue": "إجهاد مائي وحراري",
+        "secondary_issue": "احتمال ضعف في كفاءة التبريد أو الري",
+        "explanation": "تم رصد انخفاض في رطوبة التربة مع ارتفاع في درجة الحرارة."
+      },
+      "risk_factors": [
+        {
+          "code": "LOW_SOIL_MOISTURE",
+          "label": "انخفاض رطوبة التربة",
+          "severity": "high",
+          "value": 18.0,
+          "ideal_range": "30-70"
+        },
+        {
+          "code": "HIGH_TEMPERATURE",
+          "label": "ارتفاع درجة الحرارة",
+          "severity": "medium",
+          "value": 39.0,
+          "ideal_range": "20-35"
+        },
+        {
+          "code": "LOW_HUMIDITY",
+          "label": "انخفاض الرطوبة الجوية",
+          "severity": "medium",
+          "value": 25.0,
+          "ideal_range": "40-80"
+        },
+        {
+          "code": "HIGH_SOIL_TEMP",
+          "label": "ارتفاع حرارة التربة",
+          "severity": "medium",
+          "value": 34.0,
+          "ideal_range": "18-30"
+        },
+        {
+          "code": "LOW_LIGHT",
+          "label": "ضعف الإضاءة",
+          "severity": "medium",
+          "value": "Low",
+          "ideal_range": "Sufficient"
+        }
+      ],
+      "recommendations": [
+        "🚨 النبات (Tomato) في حالة حرجة ويحتاج تدخلًا فوريًا.",
+        "🌡️ درجة الحرارة مرتفعة؛ حسّن التهوية أو التبريد.",
+        "💧 رطوبة التربة منخفضة؛ زوّد الري تدريجيًا وراقب الاستجابة.",
+        "🌫️ الرطوبة الجوية منخفضة؛ قد يزيد ذلك من الإجهاد المائي.",
+        "🌱 حرارة التربة مرتفعة؛ راقب منطقة الجذور جيدًا.",
+        "☀️ الإضاءة ضعيفة؛ زوّد الضوء أو مدة التعرض."
+      ],
+      "actions": [
+        {
+          "priority": 1,
+          "code": "IRRIGATION_UP",
+          "title": "زيادة الري تدريجيًا",
+          "details": "رطوبة التربة أقل من النطاق المناسب."
+        },
+        {
+          "priority": 2,
+          "code": "COOLING_ON",
+          "title": "تحسين التهوية أو التبريد",
+          "details": "درجة الحرارة أعلى من النطاق المناسب."
+        },
+        {
+          "priority": 2,
+          "code": "ROOTZONE_COOL",
+          "title": "خفض حرارة منطقة الجذور",
+          "details": "حرارة التربة مرتفعة."
+        },
+        {
+          "priority": 3,
+          "code": "HUMIDITY_UP",
+          "title": "رفع الرطوبة عند الحاجة",
+          "details": "الرطوبة منخفضة وقد تزيد الإجهاد."
+        },
+        {
+          "priority": 3,
+          "code": "LIGHT_UP",
+          "title": "زيادة الإضاءة",
+          "details": "الإضاءة الحالية غير كافية للنمو."
+        }
+      ],
+      "monitoring": [
+        "إعادة فحص رطوبة التربة بعد التعديل في الري.",
+        "مراقبة درجة الحرارة خلال الساعات القادمة.",
+        "متابعة تحسن النمو بعد تعديل الإضاءة."
+      ],
+      "backend_flags": {
+        "needs_irrigation": true,
+        "needs_drainage_check": false,
+        "needs_cooling": true,
+        "needs_heating": false,
+        "needs_light_adjustment": true,
+        "needs_humidity_adjustment": true,
+        "needs_urgent_attention": true
+      },
+      "notification": {
+        "send": true,
+        "title": "🚨 تحذير: حالة حرجة",
+        "message": "إجهاد مائي وحراري - الإجراء الفوري: زيادة الري تدريجيًا",
+        "type": "critical"
+      },
+      "timestamp": "2026-04-19 14:05:45"
+    }
+  },
+  {
+    "timestamp": "2026-04-19 14:06:21",
+    "request_type": "mobile_predict",
+    "input": {
+      "cropType": "Tomato",
+      "temperature": 39,
+      "humidity": 25,
+      "soilMoisture": 18,
+      "soilTemp": 34,
+      "light": "Low"
+    },
+    "result": {
+      "status": "High Stress",
+      "final_status": "High Stress",
+      "confidence": {
+        "Healthy": 0.007,
+        "High Stress": 0.947,
+        "Moderate Stress": 0.047
+      },
+      "alert": true,
+      "severity": "high",
+      "summary": "النبات في حالة حرجة، ويجب التدخل السريع لتفادي تدهور الحالة.",
+      "general_recommendation": "النبات في حالة حرجة! يجب التدخل فورًا بفحص رطوبة التربة والعناصر الغذائية ودرجة الحرارة وتحسين الظروف البيئية.",
+      "diagnosis": {
+        "primary_issue": "إجهاد مائي وحراري",
+        "secondary_issue": "احتمال ضعف في كفاءة التبريد أو الري",
+        "explanation": "تم رصد انخفاض في رطوبة التربة مع ارتفاع في درجة الحرارة."
+      },
+      "risk_factors": [
+        {
+          "code": "LOW_SOIL_MOISTURE",
+          "label": "انخفاض رطوبة التربة",
+          "severity": "high",
+          "value": 18.0,
+          "ideal_range": "30-70"
+        },
+        {
+          "code": "HIGH_TEMPERATURE",
+          "label": "ارتفاع درجة الحرارة",
+          "severity": "medium",
+          "value": 39.0,
+          "ideal_range": "20-35"
+        },
+        {
+          "code": "LOW_HUMIDITY",
+          "label": "انخفاض الرطوبة الجوية",
+          "severity": "medium",
+          "value": 25.0,
+          "ideal_range": "40-80"
+        },
+        {
+          "code": "HIGH_SOIL_TEMP",
+          "label": "ارتفاع حرارة التربة",
+          "severity": "medium",
+          "value": 34.0,
+          "ideal_range": "18-30"
+        },
+        {
+          "code": "LOW_LIGHT",
+          "label": "ضعف الإضاءة",
+          "severity": "medium",
+          "value": "Low",
+          "ideal_range": "Sufficient"
+        }
+      ],
+      "recommendations": [
+        "🚨 النبات (Tomato) في حالة حرجة ويحتاج تدخلًا فوريًا.",
+        "🌡️ درجة الحرارة مرتفعة؛ حسّن التهوية أو التبريد.",
+        "💧 رطوبة التربة منخفضة؛ زوّد الري تدريجيًا وراقب الاستجابة.",
+        "🌫️ الرطوبة الجوية منخفضة؛ قد يزيد ذلك من الإجهاد المائي.",
+        "🌱 حرارة التربة مرتفعة؛ راقب منطقة الجذور جيدًا.",
+        "☀️ الإضاءة ضعيفة؛ زوّد الضوء أو مدة التعرض."
+      ],
+      "actions": [
+        {
+          "priority": 1,
+          "code": "IRRIGATION_UP",
+          "title": "زيادة الري تدريجيًا",
+          "details": "رطوبة التربة أقل من النطاق المناسب."
+        },
+        {
+          "priority": 2,
+          "code": "COOLING_ON",
+          "title": "تحسين التهوية أو التبريد",
+          "details": "درجة الحرارة أعلى من النطاق المناسب."
+        },
+        {
+          "priority": 2,
+          "code": "ROOTZONE_COOL",
+          "title": "خفض حرارة منطقة الجذور",
+          "details": "حرارة التربة مرتفعة."
+        },
+        {
+          "priority": 3,
+          "code": "HUMIDITY_UP",
+          "title": "رفع الرطوبة عند الحاجة",
+          "details": "الرطوبة منخفضة وقد تزيد الإجهاد."
+        },
+        {
+          "priority": 3,
+          "code": "LIGHT_UP",
+          "title": "زيادة الإضاءة",
+          "details": "الإضاءة الحالية غير كافية للنمو."
+        }
+      ],
+      "monitoring": [
+        "إعادة فحص رطوبة التربة بعد التعديل في الري.",
+        "مراقبة درجة الحرارة خلال الساعات القادمة.",
+        "متابعة تحسن النمو بعد تعديل الإضاءة."
+      ],
+      "backend_flags": {
+        "needs_irrigation": true,
+        "needs_drainage_check": false,
+        "needs_cooling": true,
+        "needs_heating": false,
+        "needs_light_adjustment": true,
+        "needs_humidity_adjustment": true,
+        "needs_urgent_attention": true
+      },
+      "notification": {
+        "send": true,
+        "title": "🚨 تحذير: حالة حرجة",
+        "message": "إجهاد مائي وحراري - الإجراء الفوري: زيادة الري تدريجيًا",
+        "type": "critical"
+      },
+      "timestamp": "2026-04-19 14:06:21"
+    }
+  },
+  {
+    "timestamp": "2026-04-19 14:26:19",
+    "request_type": "mobile_predict",
+    "input": {
+      "cropType": "Tomato",
+      "temperature": 39,
+      "humidity": 25,
+      "soilMoisture": 18,
+      "soilTemp": 34,
+      "light": "Low"
+    },
+    "result": {
+      "status": "High Stress",
+      "final_status": "High Stress",
+      "confidence": {
+        "Healthy": 0.007,
+        "High Stress": 0.947,
+        "Moderate Stress": 0.047
+      },
+      "alert": true,
+      "severity": "high",
+      "summary": "النبات في حالة حرجة، ويجب التدخل السريع لتفادي تدهور الحالة.",
+      "general_recommendation": "النبات في حالة حرجة! يجب التدخل فورًا بفحص رطوبة التربة والعناصر الغذائية ودرجة الحرارة وتحسين الظروف البيئية.",
+      "diagnosis": {
+        "primary_issue": "إجهاد مائي وحراري",
+        "secondary_issue": "احتمال ضعف في كفاءة التبريد أو الري",
+        "explanation": "تم رصد انخفاض في رطوبة التربة مع ارتفاع في درجة الحرارة."
+      },
+      "risk_factors": [
+        {
+          "code": "LOW_SOIL_MOISTURE",
+          "label": "انخفاض رطوبة التربة",
+          "severity": "high",
+          "value": 18.0,
+          "ideal_range": "30-70"
+        },
+        {
+          "code": "HIGH_TEMPERATURE",
+          "label": "ارتفاع درجة الحرارة",
+          "severity": "medium",
+          "value": 39.0,
+          "ideal_range": "20-35"
+        },
+        {
+          "code": "LOW_HUMIDITY",
+          "label": "انخفاض الرطوبة الجوية",
+          "severity": "medium",
+          "value": 25.0,
+          "ideal_range": "40-80"
+        },
+        {
+          "code": "HIGH_SOIL_TEMP",
+          "label": "ارتفاع حرارة التربة",
+          "severity": "medium",
+          "value": 34.0,
+          "ideal_range": "18-30"
+        },
+        {
+          "code": "LOW_LIGHT",
+          "label": "ضعف الإضاءة",
+          "severity": "medium",
+          "value": "Low",
+          "ideal_range": "Sufficient"
+        }
+      ],
+      "recommendations": [
+        "🚨 النبات (Tomato) في حالة حرجة ويحتاج تدخلًا فوريًا.",
+        "🌡️ درجة الحرارة مرتفعة؛ حسّن التهوية أو التبريد.",
+        "💧 رطوبة التربة منخفضة؛ زوّد الري تدريجيًا وراقب الاستجابة.",
+        "🌫️ الرطوبة الجوية منخفضة؛ قد يزيد ذلك من الإجهاد المائي.",
+        "🌱 حرارة التربة مرتفعة؛ راقب منطقة الجذور جيدًا.",
+        "☀️ الإضاءة ضعيفة؛ زوّد الضوء أو مدة التعرض."
+      ],
+      "actions": [
+        {
+          "priority": 1,
+          "code": "IRRIGATION_UP",
+          "title": "زيادة الري تدريجيًا",
+          "details": "رطوبة التربة أقل من النطاق المناسب."
+        },
+        {
+          "priority": 2,
+          "code": "COOLING_ON",
+          "title": "تحسين التهوية أو التبريد",
+          "details": "درجة الحرارة أعلى من النطاق المناسب."
+        },
+        {
+          "priority": 2,
+          "code": "ROOTZONE_COOL",
+          "title": "خفض حرارة منطقة الجذور",
+          "details": "حرارة التربة مرتفعة."
+        },
+        {
+          "priority": 3,
+          "code": "HUMIDITY_UP",
+          "title": "رفع الرطوبة عند الحاجة",
+          "details": "الرطوبة منخفضة وقد تزيد الإجهاد."
+        },
+        {
+          "priority": 3,
+          "code": "LIGHT_UP",
+          "title": "زيادة الإضاءة",
+          "details": "الإضاءة الحالية غير كافية للنمو."
+        }
+      ],
+      "monitoring": [
+        "إعادة فحص رطوبة التربة بعد التعديل في الري.",
+        "مراقبة درجة الحرارة خلال الساعات القادمة.",
+        "متابعة تحسن النمو بعد تعديل الإضاءة."
+      ],
+      "backend_flags": {
+        "needs_irrigation": true,
+        "needs_drainage_check": false,
+        "needs_cooling": true,
+        "needs_heating": false,
+        "needs_light_adjustment": true,
+        "needs_humidity_adjustment": true,
+        "needs_urgent_attention": true
+      },
+      "notification": {
+        "send": true,
+        "title": "🚨 تحذير: حالة حرجة",
+        "message": "إجهاد مائي وحراري - الإجراء الفوري: زيادة الري تدريجيًا",
+        "type": "critical"
+      },
+      "timestamp": "2026-04-19 14:26:19"
+    }
+  },
+  {
+    "timestamp": "2026-04-19 14:34:53",
+    "request_type": "mobile_predict",
+    "input": {
+      "cropType": "Tomato",
+      "temperature": 30,
+      "humidity": 60,
+      "soilMoisture": 40,
+      "soilTemp": 25,
+      "light": "Sufficient"
+    },
+    "result": {
+      "status": "Healthy",
+      "final_status": "Healthy",
+      "confidence": {
+        "Healthy": 0.9,
+        "High Stress": 0.0,
+        "Moderate Stress": 0.1
+      },
+      "alert": false,
+      "severity": "low",
+      "summary": "النبات يبدو بحالة جيدة بناءً على التحليل المتاح.",
+      "general_recommendation": "النبات بحالة جيدة. حافظ على برنامج الري والتسميد الحالي واستمر في المتابعة الدورية.",
+      "diagnosis": {
+        "primary_issue": "لا توجد مشكلة رئيسية",
+        "secondary_issue": "الظروف الحالية مستقرة",
+        "explanation": "كل القراءات تقريبًا داخل الحدود المناسبة."
+      },
+      "risk_factors": [],
+      "recommendations": [
+        "✅ النبات (Tomato) بحالة جيدة ومستقرة.",
+        "🌡️ درجة الحرارة مناسبة.",
+        "💧 رطوبة التربة مناسبة.",
+        "🌫️ الرطوبة الجوية مناسبة.",
+        "🌱 حرارة التربة مناسبة.",
+        "☀️ الإضاءة مناسبة للنمو."
+      ],
+      "actions": [],
+      "monitoring": [
+        "استمر في المراقبة الدورية للحفاظ على استقرار الحالة."
+      ],
+      "backend_flags": {
+        "needs_irrigation": false,
+        "needs_drainage_check": false,
+        "needs_cooling": false,
+        "needs_heating": false,
+        "needs_light_adjustment": false,
+        "needs_humidity_adjustment": false,
+        "needs_urgent_attention": false
+      },
+      "notification": {
+        "send": false,
+        "title": "✅ حالة النبات مستقرة",
+        "message": "النبات بحالة جيدة ولا يحتاج إلى تدخل حاليًا.",
+        "type": "info"
+      },
+      "timestamp": "2026-04-19 14:34:53"
+    }
+  },
+  {
+    "timestamp": "2026-04-19 14:41:18",
+    "request_type": "mobile_predict",
+    "input": {
+      "cropType": "Tomato",
+      "temperature": 35,
+      "humidity": 65,
+      "soilMoisture": 45,
+      "soilTemp": 30,
+      "light": "Medium"
+    },
+    "result": {
+      "status": "Moderate Stress",
+      "final_status": "Moderate Stress",
+      "confidence": {
+        "Healthy": 0.34,
+        "High Stress": 0.02,
+        "Moderate Stress": 0.64
+      },
+      "alert": true,
+      "severity": "medium",
+      "summary": "يوجد إجهاد متوسط على النبات، ويُنصح بالمتابعة واتخاذ إجراءات تصحيحية.",
+      "general_recommendation": "يوجد إجهاد متوسط على النبات. راجع الري ودرجة الحرارة والإضاءة وقم بضبطهم لتحسين الحالة.",
+      "diagnosis": {
+        "primary_issue": "إجهاد متوسط",
+        "secondary_issue": "خلل بيئي يحتاج تصحيح",
+        "explanation": "تم رصد عامل أو أكثر خارج النطاق المثالي."
+      },
+      "risk_factors": [
+        {
+          "code": "MEDIUM_LIGHT",
+          "label": "إضاءة متوسطة",
+          "severity": "low",
+          "value": "Medium",
+          "ideal_range": "Sufficient"
+        }
+      ],
+      "recommendations": [
+        "⚠️ النبات (Tomato) يعاني من إجهاد متوسط ويحتاج متابعة.",
+        "🌡️ درجة الحرارة مناسبة.",
+        "💧 رطوبة التربة مناسبة.",
+        "🌫️ الرطوبة الجوية مناسبة.",
+        "🌱 حرارة التربة مناسبة.",
+        "☀️ الإضاءة متوسطة؛ استمر في المتابعة."
+      ],
+      "actions": [],
+      "monitoring": [
+        "راجع القراءات القادمة وتابع أي تغيرات جديدة في الحالة."
+      ],
+      "backend_flags": {
+        "needs_irrigation": false,
+        "needs_drainage_check": false,
+        "needs_cooling": false,
+        "needs_heating": false,
+        "needs_light_adjustment": true,
+        "needs_humidity_adjustment": false,
+        "needs_urgent_attention": false
+      },
+      "notification": {
+        "send": true,
+        "title": "⚠️ تنبيه: إجهاد متوسط",
+        "message": "إجهاد متوسط - الإجراء المقترح: راجع القراءات الحالية",
+        "type": "warning"
+      },
+      "timestamp": "2026-04-19 14:41:18"
+    }
+  },
+  {
+    "timestamp": "2026-04-19 14:43:30",
+    "request_type": "mobile_predict",
+    "input": {
+      "cropType": "Tomato",
+      "temperature": 35,
+      "humidity": 65,
+      "soilMoisture": 45,
+      "soilTemp": 30,
+      "light": "Medium"
+    },
+    "result": {
+      "status": "Moderate Stress",
+      "final_status": "Moderate Stress",
+      "confidence": {
+        "Healthy": 0.34,
+        "High Stress": 0.02,
+        "Moderate Stress": 0.64
+      },
+      "alert": true,
+      "severity": "medium",
+      "summary": "يوجد إجهاد متوسط على النبات، ويُنصح بالمتابعة واتخاذ إجراءات تصحيحية.",
+      "general_recommendation": "يوجد إجهاد متوسط على النبات. راجع الري ودرجة الحرارة والإضاءة وقم بضبطهم لتحسين الحالة.",
+      "diagnosis": {
+        "primary_issue": "إجهاد متوسط",
+        "secondary_issue": "خلل بيئي يحتاج تصحيح",
+        "explanation": "تم رصد عامل أو أكثر خارج النطاق المثالي."
+      },
+      "risk_factors": [
+        {
+          "code": "MEDIUM_LIGHT",
+          "label": "إضاءة متوسطة",
+          "severity": "low",
+          "value": "Medium",
+          "ideal_range": "Sufficient"
+        }
+      ],
+      "recommendations": [
+        "⚠️ النبات (Tomato) يعاني من إجهاد متوسط ويحتاج متابعة.",
+        "🌡️ درجة الحرارة مناسبة.",
+        "💧 رطوبة التربة مناسبة.",
+        "🌫️ الرطوبة الجوية مناسبة.",
+        "🌱 حرارة التربة مناسبة.",
+        "☀️ الإضاءة متوسطة؛ استمر في المتابعة."
+      ],
+      "actions": [],
+      "monitoring": [
+        "راجع القراءات القادمة وتابع أي تغيرات جديدة في الحالة."
+      ],
+      "backend_flags": {
+        "needs_irrigation": false,
+        "needs_drainage_check": false,
+        "needs_cooling": false,
+        "needs_heating": false,
+        "needs_light_adjustment": true,
+        "needs_humidity_adjustment": false,
+        "needs_urgent_attention": false
+      },
+      "notification": {
+        "send": true,
+        "title": "⚠️ تنبيه: إجهاد متوسط",
+        "message": "إجهاد متوسط - الإجراء المقترح: راجع القراءات الحالية",
+        "type": "warning"
+      },
+      "timestamp": "2026-04-19 14:43:30"
+    }
+  },
+  {
+    "timestamp": "2026-04-19 14:45:35",
+    "request_type": "mobile_predict",
+    "input": {
+      "cropType": "Tomato",
+      "temperature": 35,
+      "humidity": 65,
+      "soilMoisture": 45,
+      "soilTemp": 30,
+      "light": "Medium"
+    },
+    "result": {
+      "status": "Moderate Stress",
+      "final_status": "Moderate Stress",
+      "confidence": {
+        "Healthy": 0.34,
+        "High Stress": 0.02,
+        "Moderate Stress": 0.64
+      },
+      "alert": true,
+      "severity": "medium",
+      "summary": "يوجد إجهاد متوسط على النبات، ويُنصح بالمتابعة واتخاذ إجراءات تصحيحية.",
+      "general_recommendation": "يوجد إجهاد متوسط على النبات. راجع الري ودرجة الحرارة والإضاءة وقم بضبطهم لتحسين الحالة.",
+      "diagnosis": {
+        "primary_issue": "إجهاد متوسط",
+        "secondary_issue": "خلل بيئي يحتاج تصحيح",
+        "explanation": "تم رصد عامل أو أكثر خارج النطاق المثالي."
+      },
+      "risk_factors": [
+        {
+          "code": "MEDIUM_LIGHT",
+          "label": "إضاءة متوسطة",
+          "severity": "low",
+          "value": "Medium",
+          "ideal_range": "Sufficient"
+        }
+      ],
+      "recommendations": [
+        "⚠️ النبات (Tomato) يعاني من إجهاد متوسط ويحتاج متابعة.",
+        "🌡️ درجة الحرارة مناسبة.",
+        "💧 رطوبة التربة مناسبة.",
+        "🌫️ الرطوبة الجوية مناسبة.",
+        "🌱 حرارة التربة مناسبة.",
+        "☀️ الإضاءة متوسطة؛ استمر في المتابعة."
+      ],
+      "actions": [],
+      "monitoring": [
+        "راجع القراءات القادمة وتابع أي تغيرات جديدة في الحالة."
+      ],
+      "backend_flags": {
+        "needs_irrigation": false,
+        "needs_drainage_check": false,
+        "needs_cooling": false,
+        "needs_heating": false,
+        "needs_light_adjustment": true,
+        "needs_humidity_adjustment": false,
+        "needs_urgent_attention": false
+      },
+      "notification": {
+        "send": true,
+        "title": "⚠️ تنبيه: إجهاد متوسط",
+        "message": "إجهاد متوسط - الإجراء المقترح: راجع القراءات الحالية",
+        "type": "warning"
+      },
+      "timestamp": "2026-04-19 14:45:35"
+    }
+  },
+  {
+    "timestamp": "2026-04-19 14:46:47",
+    "request_type": "mobile_predict",
+    "input": {
+      "cropType": "Tomato",
+      "temperature": 35,
+      "humidity": 65,
+      "soilMoisture": 45,
+      "soilTemp": 30,
+      "light": "Medium"
+    },
+    "result": {
+      "status": "Moderate Stress",
+      "final_status": "Moderate Stress",
+      "confidence": {
+        "Healthy": 0.34,
+        "High Stress": 0.02,
+        "Moderate Stress": 0.64
+      },
+      "alert": true,
+      "severity": "medium",
+      "summary": "يوجد إجهاد متوسط على النبات، ويُنصح بالمتابعة واتخاذ إجراءات تصحيحية.",
+      "general_recommendation": "يوجد إجهاد متوسط على النبات. راجع الري ودرجة الحرارة والإضاءة وقم بضبطهم لتحسين الحالة.",
+      "diagnosis": {
+        "primary_issue": "إجهاد متوسط",
+        "secondary_issue": "خلل بيئي يحتاج تصحيح",
+        "explanation": "تم رصد عامل أو أكثر خارج النطاق المثالي."
+      },
+      "risk_factors": [
+        {
+          "code": "MEDIUM_LIGHT",
+          "label": "إضاءة متوسطة",
+          "severity": "low",
+          "value": "Medium",
+          "ideal_range": "Sufficient"
+        }
+      ],
+      "recommendations": [
+        "⚠️ النبات (Tomato) يعاني من إجهاد متوسط ويحتاج متابعة.",
+        "🌡️ درجة الحرارة مناسبة.",
+        "💧 رطوبة التربة مناسبة.",
+        "🌫️ الرطوبة الجوية مناسبة.",
+        "🌱 حرارة التربة مناسبة.",
+        "☀️ الإضاءة متوسطة؛ استمر في المتابعة."
+      ],
+      "actions": [],
+      "monitoring": [
+        "راجع القراءات القادمة وتابع أي تغيرات جديدة في الحالة."
+      ],
+      "backend_flags": {
+        "needs_irrigation": false,
+        "needs_drainage_check": false,
+        "needs_cooling": false,
+        "needs_heating": false,
+        "needs_light_adjustment": true,
+        "needs_humidity_adjustment": false,
+        "needs_urgent_attention": false
+      },
+      "notification": {
+        "send": true,
+        "title": "⚠️ تنبيه: إجهاد متوسط",
+        "message": "إجهاد متوسط - الإجراء المقترح: راجع القراءات الحالية",
+        "type": "warning"
+      },
+      "timestamp": "2026-04-19 14:46:47"
+    }
+  },
+  {
+    "timestamp": "2026-04-19 14:50:19",
+    "request_type": "mobile_predict",
+    "input": {
+      "cropType": "Tomato",
+      "temperature": 24,
+      "humidity": 50,
+      "soilMoisture": 45,
+      "soilTemp": 22,
+      "light": "Sufficient"
+    },
+    "result": {
+      "status": "Healthy",
+      "final_status": "Healthy",
+      "confidence": {
+        "Healthy": 0.893,
+        "High Stress": 0.0,
+        "Moderate Stress": 0.107
+      },
+      "alert": false,
+      "severity": "low",
+      "summary": "النبات يبدو بحالة جيدة بناءً على التحليل المتاح.",
+      "general_recommendation": "النبات بحالة جيدة. حافظ على برنامج الري والتسميد الحالي واستمر في المتابعة الدورية.",
+      "diagnosis": {
+        "primary_issue": "لا توجد مشكلة رئيسية",
+        "secondary_issue": "الظروف الحالية مستقرة",
+        "explanation": "كل القراءات تقريبًا داخل الحدود المناسبة."
+      },
+      "risk_factors": [],
+      "recommendations": [
+        "✅ النبات (Tomato) بحالة جيدة ومستقرة.",
+        "🌡️ درجة الحرارة مناسبة.",
+        "💧 رطوبة التربة مناسبة.",
+        "🌫️ الرطوبة الجوية مناسبة.",
+        "🌱 حرارة التربة مناسبة.",
+        "☀️ الإضاءة مناسبة للنمو."
+      ],
+      "actions": [],
+      "monitoring": [
+        "استمر في المراقبة الدورية للحفاظ على استقرار الحالة."
+      ],
+      "backend_flags": {
+        "needs_irrigation": false,
+        "needs_drainage_check": false,
+        "needs_cooling": false,
+        "needs_heating": false,
+        "needs_light_adjustment": false,
+        "needs_humidity_adjustment": false,
+        "needs_urgent_attention": false
+      },
+      "notification": {
+        "send": false,
+        "title": "✅ حالة النبات مستقرة",
+        "message": "النبات بحالة جيدة ولا يحتاج إلى تدخل حاليًا.",
+        "type": "info"
+      },
+      "timestamp": "2026-04-19 14:50:19"
+    }
+  },
+  {
+    "timestamp": "2026-04-19 15:00:01",
+    "request_type": "mobile_predict",
+    "input": {
+      "cropType": "Tomato",
+      "temperature": 55,
+      "humidity": 50,
+      "soilMoisture": 5,
+      "soilTemp": 22,
+      "light": "Sufficient"
+    },
+    "result": {
+      "status": "Healthy",
+      "final_status": "Healthy",
+      "confidence": {
+        "Healthy": 0.4,
+        "High Stress": 0.34,
+        "Moderate Stress": 0.26
+      },
+      "alert": false,
+      "severity": "low",
+      "summary": "النبات يبدو بحالة جيدة بناءً على التحليل المتاح.",
+      "general_recommendation": "النبات بحالة جيدة. حافظ على برنامج الري والتسميد الحالي واستمر في المتابعة الدورية.",
+      "diagnosis": {
+        "primary_issue": "إجهاد مائي وحراري",
+        "secondary_issue": "احتمال ضعف في كفاءة التبريد أو الري",
+        "explanation": "تم رصد انخفاض في رطوبة التربة مع ارتفاع في درجة الحرارة."
+      },
+      "risk_factors": [
+        {
+          "code": "LOW_SOIL_MOISTURE",
+          "label": "انخفاض رطوبة التربة",
+          "severity": "high",
+          "value": 5.0,
+          "ideal_range": "30-70"
+        },
+        {
+          "code": "HIGH_TEMPERATURE",
+          "label": "ارتفاع درجة الحرارة",
+          "severity": "medium",
+          "value": 55.0,
+          "ideal_range": "20-35"
+        }
+      ],
+      "recommendations": [
+        "✅ النبات (Tomato) بحالة جيدة ومستقرة.",
+        "🌡️ درجة الحرارة مرتفعة؛ حسّن التهوية أو التبريد.",
+        "💧 رطوبة التربة منخفضة؛ زوّد الري تدريجيًا وراقب الاستجابة.",
+        "🌫️ الرطوبة الجوية مناسبة.",
+        "🌱 حرارة التربة مناسبة.",
+        "☀️ الإضاءة مناسبة للنمو."
+      ],
+      "actions": [
+        {
+          "priority": 1,
+          "code": "IRRIGATION_UP",
+          "title": "زيادة الري تدريجيًا",
+          "details": "رطوبة التربة أقل من النطاق المناسب."
+        },
+        {
+          "priority": 2,
+          "code": "COOLING_ON",
+          "title": "تحسين التهوية أو التبريد",
+          "details": "درجة الحرارة أعلى من النطاق المناسب."
+        }
+      ],
+      "monitoring": [
+        "إعادة فحص رطوبة التربة بعد التعديل في الري.",
+        "مراقبة درجة الحرارة خلال الساعات القادمة."
+      ],
+      "backend_flags": {
+        "needs_irrigation": true,
+        "needs_drainage_check": false,
+        "needs_cooling": true,
+        "needs_heating": false,
+        "needs_light_adjustment": false,
+        "needs_humidity_adjustment": false,
+        "needs_urgent_attention": false
+      },
+      "notification": {
+        "send": false,
+        "title": "✅ حالة النبات مستقرة",
+        "message": "النبات بحالة جيدة ولا يحتاج إلى تدخل حاليًا.",
+        "type": "info"
+      },
+      "timestamp": "2026-04-19 15:00:01"
+    }
+  },
+  {
+    "timestamp": "2026-04-19 15:00:33",
+    "request_type": "mobile_predict",
+    "input": {
+      "cropType": "Tomato",
+      "temperature": 55,
+      "humidity": 5,
+      "soilMoisture": 5,
+      "soilTemp": 55,
+      "light": "Sufficient"
+    },
+    "result": {
+      "status": "High Stress",
+      "final_status": "High Stress",
+      "confidence": {
+        "Healthy": 0.08,
+        "High Stress": 0.76,
+        "Moderate Stress": 0.16
+      },
+      "alert": true,
+      "severity": "high",
+      "summary": "النبات في حالة حرجة، ويجب التدخل السريع لتفادي تدهور الحالة.",
+      "general_recommendation": "النبات في حالة حرجة! يجب التدخل فورًا بفحص رطوبة التربة والعناصر الغذائية ودرجة الحرارة وتحسين الظروف البيئية.",
+      "diagnosis": {
+        "primary_issue": "إجهاد مائي وحراري",
+        "secondary_issue": "احتمال ضعف في كفاءة التبريد أو الري",
+        "explanation": "تم رصد انخفاض في رطوبة التربة مع ارتفاع في درجة الحرارة."
+      },
+      "risk_factors": [
+        {
+          "code": "LOW_SOIL_MOISTURE",
+          "label": "انخفاض رطوبة التربة",
+          "severity": "high",
+          "value": 5.0,
+          "ideal_range": "30-70"
+        },
+        {
+          "code": "HIGH_TEMPERATURE",
+          "label": "ارتفاع درجة الحرارة",
+          "severity": "medium",
+          "value": 55.0,
+          "ideal_range": "20-35"
+        },
+        {
+          "code": "LOW_HUMIDITY",
+          "label": "انخفاض الرطوبة الجوية",
+          "severity": "medium",
+          "value": 5.0,
+          "ideal_range": "40-80"
+        },
+        {
+          "code": "HIGH_SOIL_TEMP",
+          "label": "ارتفاع حرارة التربة",
+          "severity": "medium",
+          "value": 55.0,
+          "ideal_range": "18-30"
+        }
+      ],
+      "recommendations": [
+        "🚨 النبات (Tomato) في حالة حرجة ويحتاج تدخلًا فوريًا.",
+        "🌡️ درجة الحرارة مرتفعة؛ حسّن التهوية أو التبريد.",
+        "💧 رطوبة التربة منخفضة؛ زوّد الري تدريجيًا وراقب الاستجابة.",
+        "🌫️ الرطوبة الجوية منخفضة؛ قد يزيد ذلك من الإجهاد المائي.",
+        "🌱 حرارة التربة مرتفعة؛ راقب منطقة الجذور جيدًا.",
+        "☀️ الإضاءة مناسبة للنمو."
+      ],
+      "actions": [
+        {
+          "priority": 1,
+          "code": "IRRIGATION_UP",
+          "title": "زيادة الري تدريجيًا",
+          "details": "رطوبة التربة أقل من النطاق المناسب."
+        },
+        {
+          "priority": 2,
+          "code": "COOLING_ON",
+          "title": "تحسين التهوية أو التبريد",
+          "details": "درجة الحرارة أعلى من النطاق المناسب."
+        },
+        {
+          "priority": 2,
+          "code": "ROOTZONE_COOL",
+          "title": "خفض حرارة منطقة الجذور",
+          "details": "حرارة التربة مرتفعة."
+        },
+        {
+          "priority": 3,
+          "code": "HUMIDITY_UP",
+          "title": "رفع الرطوبة عند الحاجة",
+          "details": "الرطوبة منخفضة وقد تزيد الإجهاد."
+        }
+      ],
+      "monitoring": [
+        "إعادة فحص رطوبة التربة بعد التعديل في الري.",
+        "مراقبة درجة الحرارة خلال الساعات القادمة."
+      ],
+      "backend_flags": {
+        "needs_irrigation": true,
+        "needs_drainage_check": false,
+        "needs_cooling": true,
+        "needs_heating": false,
+        "needs_light_adjustment": false,
+        "needs_humidity_adjustment": true,
+        "needs_urgent_attention": true
+      },
+      "notification": {
+        "send": true,
+        "title": "🚨 تحذير: حالة حرجة",
+        "message": "إجهاد مائي وحراري - الإجراء الفوري: زيادة الري تدريجيًا",
+        "type": "critical"
+      },
+      "timestamp": "2026-04-19 15:00:33"
+    }
+  },
+  {
+    "timestamp": "2026-04-19 15:07:24",
+    "request_type": "mobile_predict",
+    "input": {
+      "cropType": "Corn",
+      "temperature": 24,
+      "humidity": 50,
+      "soilMoisture": 5,
+      "soilTemp": 30,
+      "light": "Sufficient"
+    },
+    "result": {
+      "status": "Healthy",
+      "final_status": "Healthy",
+      "confidence": {
+        "Healthy": 0.453,
+        "High Stress": 0.173,
+        "Moderate Stress": 0.373
+      },
+      "alert": false,
+      "severity": "low",
+      "summary": "النبات يبدو بحالة جيدة بناءً على التحليل المتاح.",
+      "general_recommendation": "النبات بحالة جيدة. حافظ على برنامج الري والتسميد الحالي واستمر في المتابعة الدورية.",
+      "diagnosis": {
+        "primary_issue": "حالة مستقرة نسبيًا",
+        "secondary_issue": "مطلوب استمرار المتابعة",
+        "explanation": "لا توجد مؤشرات خطورة شديدة حاليًا."
+      },
+      "risk_factors": [
+        {
+          "code": "LOW_SOIL_MOISTURE",
+          "label": "انخفاض رطوبة التربة",
+          "severity": "high",
+          "value": 5.0,
+          "ideal_range": "30-70"
+        }
+      ],
+      "recommendations": [
+        "✅ النبات (Corn) بحالة جيدة ومستقرة.",
+        "🌡️ درجة الحرارة مناسبة.",
+        "💧 رطوبة التربة منخفضة؛ زوّد الري تدريجيًا وراقب الاستجابة.",
+        "🌫️ الرطوبة الجوية مناسبة.",
+        "🌱 حرارة التربة مناسبة.",
+        "☀️ الإضاءة مناسبة للنمو."
+      ],
+      "actions": [
+        {
+          "priority": 1,
+          "code": "IRRIGATION_UP",
+          "title": "زيادة الري تدريجيًا",
+          "details": "رطوبة التربة أقل من النطاق المناسب."
+        }
+      ],
+      "monitoring": [
+        "إعادة فحص رطوبة التربة بعد التعديل في الري."
+      ],
+      "backend_flags": {
+        "needs_irrigation": true,
+        "needs_drainage_check": false,
+        "needs_cooling": false,
+        "needs_heating": false,
+        "needs_light_adjustment": false,
+        "needs_humidity_adjustment": false,
+        "needs_urgent_attention": false
+      },
+      "notification": {
+        "send": false,
+        "title": "✅ حالة النبات مستقرة",
+        "message": "النبات بحالة جيدة ولا يحتاج إلى تدخل حاليًا.",
+        "type": "info"
+      },
+      "timestamp": "2026-04-19 15:07:24"
+    }
+  },
+  {
+    "timestamp": "2026-04-19 15:07:51",
+    "request_type": "mobile_predict",
+    "input": {
+      "cropType": "Corn",
+      "temperature": 55,
+      "humidity": 5,
+      "soilMoisture": 5,
+      "soilTemp": 55,
+      "light": "Sufficient"
+    },
+    "result": {
+      "status": "High Stress",
+      "final_status": "High Stress",
+      "confidence": {
+        "Healthy": 0.073,
+        "High Stress": 0.753,
+        "Moderate Stress": 0.173
+      },
+      "alert": true,
+      "severity": "high",
+      "summary": "النبات في حالة حرجة، ويجب التدخل السريع لتفادي تدهور الحالة.",
+      "general_recommendation": "النبات في حالة حرجة! يجب التدخل فورًا بفحص رطوبة التربة والعناصر الغذائية ودرجة الحرارة وتحسين الظروف البيئية.",
+      "diagnosis": {
+        "primary_issue": "إجهاد مائي وحراري",
+        "secondary_issue": "احتمال ضعف في كفاءة التبريد أو الري",
+        "explanation": "تم رصد انخفاض في رطوبة التربة مع ارتفاع في درجة الحرارة."
+      },
+      "risk_factors": [
+        {
+          "code": "LOW_SOIL_MOISTURE",
+          "label": "انخفاض رطوبة التربة",
+          "severity": "high",
+          "value": 5.0,
+          "ideal_range": "30-70"
+        },
+        {
+          "code": "HIGH_TEMPERATURE",
+          "label": "ارتفاع درجة الحرارة",
+          "severity": "medium",
+          "value": 55.0,
+          "ideal_range": "20-35"
+        },
+        {
+          "code": "LOW_HUMIDITY",
+          "label": "انخفاض الرطوبة الجوية",
+          "severity": "medium",
+          "value": 5.0,
+          "ideal_range": "40-80"
+        },
+        {
+          "code": "HIGH_SOIL_TEMP",
+          "label": "ارتفاع حرارة التربة",
+          "severity": "medium",
+          "value": 55.0,
+          "ideal_range": "18-30"
+        }
+      ],
+      "recommendations": [
+        "🚨 النبات (Corn) في حالة حرجة ويحتاج تدخلًا فوريًا.",
+        "🌡️ درجة الحرارة مرتفعة؛ حسّن التهوية أو التبريد.",
+        "💧 رطوبة التربة منخفضة؛ زوّد الري تدريجيًا وراقب الاستجابة.",
+        "🌫️ الرطوبة الجوية منخفضة؛ قد يزيد ذلك من الإجهاد المائي.",
+        "🌱 حرارة التربة مرتفعة؛ راقب منطقة الجذور جيدًا.",
+        "☀️ الإضاءة مناسبة للنمو."
+      ],
+      "actions": [
+        {
+          "priority": 1,
+          "code": "IRRIGATION_UP",
+          "title": "زيادة الري تدريجيًا",
+          "details": "رطوبة التربة أقل من النطاق المناسب."
+        },
+        {
+          "priority": 2,
+          "code": "COOLING_ON",
+          "title": "تحسين التهوية أو التبريد",
+          "details": "درجة الحرارة أعلى من النطاق المناسب."
+        },
+        {
+          "priority": 2,
+          "code": "ROOTZONE_COOL",
+          "title": "خفض حرارة منطقة الجذور",
+          "details": "حرارة التربة مرتفعة."
+        },
+        {
+          "priority": 3,
+          "code": "HUMIDITY_UP",
+          "title": "رفع الرطوبة عند الحاجة",
+          "details": "الرطوبة منخفضة وقد تزيد الإجهاد."
+        }
+      ],
+      "monitoring": [
+        "إعادة فحص رطوبة التربة بعد التعديل في الري.",
+        "مراقبة درجة الحرارة خلال الساعات القادمة."
+      ],
+      "backend_flags": {
+        "needs_irrigation": true,
+        "needs_drainage_check": false,
+        "needs_cooling": true,
+        "needs_heating": false,
+        "needs_light_adjustment": false,
+        "needs_humidity_adjustment": true,
+        "needs_urgent_attention": true
+      },
+      "notification": {
+        "send": true,
+        "title": "🚨 تحذير: حالة حرجة",
+        "message": "إجهاد مائي وحراري - الإجراء الفوري: زيادة الري تدريجيًا",
+        "type": "critical"
+      },
+      "timestamp": "2026-04-19 15:07:51"
+    }
+  },
+  {
+    "timestamp": "2026-04-19 15:14:56",
+    "request_type": "predict_with_image",
+    "input": {
+      "cropType": "Tomato",
+      "temperature": "32.5",
+      "humidity": "60",
+      "soilMoisture": "45",
+      "soilTemp": "22",
+      "light": "Sufficient"
+    },
+    "image_analysis": {
+      "green_ratio": 0.749,
+      "yellow_ratio": 0.0,
+      "brown_ratio": 0.0,
+      "health_score": 0.749,
+      "image_stress": "Healthy"
+    },
+    "result": {
+      "status": "Healthy",
+      "final_status": "Healthy",
+      "confidence": {
+        "Healthy": 0.72,
+        "High Stress": 0.007,
+        "Moderate Stress": 0.273
+      },
+      "alert": false,
+      "severity": "low",
+      "summary": "النبات يبدو بحالة جيدة بناءً على التحليل المتاح.",
+      "general_recommendation": "النبات بحالة جيدة. حافظ على برنامج الري والتسميد الحالي واستمر في المتابعة الدورية.",
+      "diagnosis": {
+        "primary_issue": "لا توجد مشكلة رئيسية",
+        "secondary_issue": "الظروف الحالية مستقرة",
+        "explanation": "كل القراءات تقريبًا داخل الحدود المناسبة."
+      },
+      "risk_factors": [],
+      "recommendations": [
+        "✅ النبات (Tomato) بحالة جيدة ومستقرة.",
+        "🌡️ درجة الحرارة مناسبة.",
+        "💧 رطوبة التربة مناسبة.",
+        "🌫️ الرطوبة الجوية مناسبة.",
+        "🌱 حرارة التربة مناسبة.",
+        "☀️ الإضاءة مناسبة للنمو."
+      ],
+      "actions": [],
+      "monitoring": [
+        "استمر في المراقبة الدورية للحفاظ على استقرار الحالة."
+      ],
+      "backend_flags": {
+        "needs_irrigation": false,
+        "needs_drainage_check": false,
+        "needs_cooling": false,
+        "needs_heating": false,
+        "needs_light_adjustment": false,
+        "needs_humidity_adjustment": false,
+        "needs_urgent_attention": false
+      },
+      "notification": {
+        "send": false,
+        "title": "✅ حالة النبات مستقرة",
+        "message": "النبات بحالة جيدة ولا يحتاج إلى تدخل حاليًا.",
+        "type": "info"
+      },
+      "timestamp": "2026-04-19 15:14:56",
+      "image_analysis": {
+        "green_ratio": 0.749,
+        "yellow_ratio": 0.0,
+        "brown_ratio": 0.0,
+        "health_score": 0.749,
+        "image_stress": "Healthy"
+      },
+      "sensor_status": "Healthy"
+    }
+  },
+  {
+    "timestamp": "2026-04-19 15:48:25",
+    "request_type": "predict_with_image",
+    "input": {
+      "cropType": "Tomato",
+      "temperature": "32.5",
+      "humidity": "60",
+      "soilMoisture": "45",
+      "soilTemp": "22",
+      "light": "Sufficient"
+    },
+    "image_analysis": {
+      "green_ratio": 0.749,
+      "yellow_ratio": 0.0,
+      "brown_ratio": 0.0,
+      "health_score": 0.749,
+      "image_stress": "Healthy"
+    },
+    "result": {
+      "status": "Healthy",
+      "final_status": "Healthy",
+      "confidence": {
+        "Healthy": 0.72,
+        "High Stress": 0.007,
+        "Moderate Stress": 0.273
+      },
+      "alert": false,
+      "severity": "low",
+      "summary": "النبات يبدو بحالة جيدة بناءً على التحليل المتاح.",
+      "general_recommendation": "النبات بحالة جيدة. حافظ على برنامج الري والتسميد الحالي واستمر في المتابعة الدورية.",
+      "diagnosis": {
+        "primary_issue": "لا توجد مشكلة رئيسية",
+        "secondary_issue": "الظروف الحالية مستقرة",
+        "explanation": "كل القراءات تقريبًا داخل الحدود المناسبة."
+      },
+      "risk_factors": [],
+      "recommendations": [
+        "✅ النبات (Tomato) بحالة جيدة ومستقرة.",
+        "🌡️ درجة الحرارة مناسبة.",
+        "💧 رطوبة التربة مناسبة.",
+        "🌫️ الرطوبة الجوية مناسبة.",
+        "🌱 حرارة التربة مناسبة.",
+        "☀️ الإضاءة مناسبة للنمو."
+      ],
+      "actions": [],
+      "monitoring": [
+        "استمر في المراقبة الدورية للحفاظ على استقرار الحالة."
+      ],
+      "backend_flags": {
+        "needs_irrigation": false,
+        "needs_drainage_check": false,
+        "needs_cooling": false,
+        "needs_heating": false,
+        "needs_light_adjustment": false,
+        "needs_humidity_adjustment": false,
+        "needs_urgent_attention": false
+      },
+      "notification": {
+        "send": false,
+        "title": "✅ حالة النبات مستقرة",
+        "message": "النبات بحالة جيدة ولا يحتاج إلى تدخل حاليًا.",
+        "type": "info"
+      },
+      "timestamp": "2026-04-19 15:48:25",
+      "image_analysis": {
+        "green_ratio": 0.749,
+        "yellow_ratio": 0.0,
+        "brown_ratio": 0.0,
+        "health_score": 0.749,
+        "image_stress": "Healthy"
+      },
+      "sensor_status": "Healthy"
+    }
+  },
+  {
+    "timestamp": "2026-04-19 15:48:37",
+    "request_type": "predict_with_image",
+    "input": {
+      "cropType": "Tomato",
+      "temperature": "32.5",
+      "humidity": "60",
+      "soilMoisture": "45",
+      "soilTemp": "22",
+      "light": "Sufficient"
+    },
+    "image_analysis": {
+      "green_ratio": 0.749,
+      "yellow_ratio": 0.0,
+      "brown_ratio": 0.0,
+      "health_score": 0.749,
+      "image_stress": "Healthy"
+    },
+    "result": {
+      "status": "Healthy",
+      "final_status": "Healthy",
+      "confidence": {
+        "Healthy": 0.72,
+        "High Stress": 0.007,
+        "Moderate Stress": 0.273
+      },
+      "alert": false,
+      "severity": "low",
+      "summary": "النبات يبدو بحالة جيدة بناءً على التحليل المتاح.",
+      "general_recommendation": "النبات بحالة جيدة. حافظ على برنامج الري والتسميد الحالي واستمر في المتابعة الدورية.",
+      "diagnosis": {
+        "primary_issue": "لا توجد مشكلة رئيسية",
+        "secondary_issue": "الظروف الحالية مستقرة",
+        "explanation": "كل القراءات تقريبًا داخل الحدود المناسبة."
+      },
+      "risk_factors": [],
+      "recommendations": [
+        "✅ النبات (Tomato) بحالة جيدة ومستقرة.",
+        "🌡️ درجة الحرارة مناسبة.",
+        "💧 رطوبة التربة مناسبة.",
+        "🌫️ الرطوبة الجوية مناسبة.",
+        "🌱 حرارة التربة مناسبة.",
+        "☀️ الإضاءة مناسبة للنمو."
+      ],
+      "actions": [],
+      "monitoring": [
+        "استمر في المراقبة الدورية للحفاظ على استقرار الحالة."
+      ],
+      "backend_flags": {
+        "needs_irrigation": false,
+        "needs_drainage_check": false,
+        "needs_cooling": false,
+        "needs_heating": false,
+        "needs_light_adjustment": false,
+        "needs_humidity_adjustment": false,
+        "needs_urgent_attention": false
+      },
+      "notification": {
+        "send": false,
+        "title": "✅ حالة النبات مستقرة",
+        "message": "النبات بحالة جيدة ولا يحتاج إلى تدخل حاليًا.",
+        "type": "info"
+      },
+      "timestamp": "2026-04-19 15:48:37",
+      "image_analysis": {
+        "green_ratio": 0.749,
+        "yellow_ratio": 0.0,
+        "brown_ratio": 0.0,
+        "health_score": 0.749,
+        "image_stress": "Healthy"
+      },
+      "sensor_status": "Healthy"
+    }
+  },
+  {
+    "timestamp": "2026-04-19 15:58:17",
+    "request_type": "predict_with_image",
+    "image_analysis": {
+      "green_ratio": 0.749,
+      "yellow_ratio": 0.0,
+      "brown_ratio": 0.0,
+      "health_score": 0.749,
+      "image_stress": "Healthy"
+    },
+    "result": {
+      "status": "Healthy",
+      "disease_name": "No Disease Detected",
+      "confidence": 0.75,
+      "recommendations": [
+        "استمر في المتابعة الدورية",
+        "حافظ على برنامج الري والتسميد الحالي"
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-04-19 19:30:02",
+    "request_type": "predict_with_image",
+    "image_analysis": {
+      "green_ratio": 0.749,
+      "yellow_ratio": 0.0,
+      "brown_ratio": 0.0,
+      "health_score": 0.749,
+      "image_stress": "Healthy"
+    },
+    "result": {
+      "status": "Healthy",
+      "disease_name": "No Disease Detected",
+      "confidence": 0.75,
+      "recommendations": [
+        "استمر في المتابعة الدورية",
+        "حافظ على برنامج الري والتسميد الحالي"
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-04-19 19:32:45",
+    "request_type": "predict_with_image",
+    "image_analysis": {
+      "green_ratio": 0.749,
+      "yellow_ratio": 0.0,
+      "brown_ratio": 0.0,
+      "health_score": 0.749,
+      "image_stress": "Healthy"
+    },
+    "result": {
+      "status": "Healthy",
+      "disease_name": "No Disease Detected",
+      "confidence": 0.75,
+      "recommendations": [
+        "استمر في المتابعة الدورية",
+        "حافظ على برنامج الري والتسميد الحالي"
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-04-19 19:34:54",
+    "request_type": "predict_with_image",
+    "image_analysis": {
+      "green_ratio": 0.753,
+      "yellow_ratio": 0.0,
+      "brown_ratio": 0.0,
+      "health_score": 0.753,
+      "image_stress": "Healthy"
+    },
+    "result": {
+      "status": "Healthy",
+      "disease_name": "No Disease Detected",
+      "confidence": 0.75,
+      "recommendations": [
+        "استمر في المتابعة الدورية",
+        "حافظ على برنامج الري والتسميد الحالي"
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-04-19 19:39:24",
+    "request_type": "predict_with_image",
+    "image_analysis": {
+      "green_ratio": 0.607,
+      "yellow_ratio": 0.146,
+      "brown_ratio": 0.027,
+      "health_score": 0.488,
+      "image_stress": "Healthy"
+    },
+    "result": {
+      "status": "Healthy",
+      "disease_name": "No Disease Detected",
+      "confidence": 0.49,
+      "recommendations": [
+        "استمر في المتابعة الدورية",
+        "حافظ على برنامج الري والتسميد الحالي"
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-04-19 19:47:45",
+    "request_type": "predict_with_image",
+    "image_analysis": {
+      "green_ratio": 0.607,
+      "yellow_ratio": 0.146,
+      "brown_ratio": 0.027,
+      "health_score": 0.488,
+      "image_stress": "Healthy"
+    },
+    "result": {
+      "status": "Healthy",
+      "disease_name": "No Disease Detected",
+      "confidence": 0.49,
+      "recommendations": [
+        "استمر في المتابعة الدورية",
+        "حافظ على برنامج الري والتسميد الحالي"
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-04-19 19:58:35",
+    "request_type": "predict_with_image",
+    "image_analysis": {
+      "green_ratio": 0.607,
+      "yellow_ratio": 0.146,
+      "brown_ratio": 0.027,
+      "health_score": 0.488,
+      "image_stress": "Healthy"
+    },
+    "result": {
+      "status": "Healthy",
+      "disease_name": "No Disease Detected",
+      "confidence": 0.49,
+      "recommendations": [
+        "استمر في المتابعة الدورية",
+        "حافظ على برنامج الري والتسميد الحالي"
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-04-19 19:58:38",
+    "request_type": "predict_with_image",
+    "image_analysis": {
+      "green_ratio": 0.607,
+      "yellow_ratio": 0.146,
+      "brown_ratio": 0.027,
+      "health_score": 0.488,
+      "image_stress": "Healthy"
+    },
+    "result": {
+      "status": "Healthy",
+      "disease_name": "No Disease Detected",
+      "confidence": 0.49,
+      "recommendations": [
+        "استمر في المتابعة الدورية",
+        "حافظ على برنامج الري والتسميد الحالي"
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-04-19 19:58:53",
+    "request_type": "predict_with_image",
+    "image_analysis": {
+      "green_ratio": 0.607,
+      "yellow_ratio": 0.146,
+      "brown_ratio": 0.027,
+      "health_score": 0.488,
+      "image_stress": "Healthy"
+    },
+    "result": {
+      "status": "Healthy",
+      "disease_name": "No Disease Detected",
+      "confidence": 0.49,
+      "recommendations": [
+        "استمر في المتابعة الدورية",
+        "حافظ على برنامج الري والتسميد الحالي"
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-04-19 19:59:27",
+    "request_type": "predict_with_image",
+    "image_analysis": {
+      "green_ratio": 0.728,
+      "yellow_ratio": 0.123,
+      "brown_ratio": 0.01,
+      "health_score": 0.602,
+      "plant_pixels": 301408,
+      "image_stress": "Healthy"
+    },
+    "result": {
+      "status": "Healthy",
+      "disease_name": "No Disease Detected",
+      "confidence": 0.6,
+      "recommendations": [
+        "استمر في المتابعة الدورية",
+        "حافظ على برنامج الري والتسميد الحالي"
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-04-19 20:00:19",
+    "request_type": "predict_with_image",
+    "image_analysis": {
+      "green_ratio": 0.62,
+      "yellow_ratio": 0.079,
+      "brown_ratio": 0.007,
+      "health_score": 0.538,
+      "plant_pixels": 308080,
+      "image_stress": "Healthy"
+    },
+    "result": {
+      "status": "Healthy",
+      "disease_name": "No Disease Detected",
+      "confidence": 0.54,
+      "recommendations": [
+        "استمر في المتابعة الدورية",
+        "حافظ على برنامج الري والتسميد الحالي"
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-04-19 20:00:26",
+    "request_type": "predict_with_image",
+    "image_analysis": {
+      "green_ratio": 0.728,
+      "yellow_ratio": 0.123,
+      "brown_ratio": 0.01,
+      "health_score": 0.602,
+      "plant_pixels": 301408,
+      "image_stress": "Healthy"
+    },
+    "result": {
+      "status": "Healthy",
+      "disease_name": "No Disease Detected",
+      "confidence": 0.6,
+      "recommendations": [
+        "استمر في المتابعة الدورية",
+        "حافظ على برنامج الري والتسميد الحالي"
+      ]
+    }
+  },
+  {
+    "timestamp": "2026-04-19 20:04:54",
+    "request_type": "predict_with_image",
+    "image_filename": "R.jfif",
+    "image_analysis": {
+      "green_ratio": 0.62,
+      "yellow_ratio": 0.079,
+      "brown_ratio": 0.007,
+      "health_score": 0.538,
+      "plant_pixels": 308080,
+      "image_stress": "Healthy"
+    },
+    "result": {
+      "status": "Healthy",
+      "disease_name": "No Disease Detected",
+      "confidence": 0.538,
+      "recommendations": [
+        "استمر في المتابعة الدورية",
+        "حافظ على برنامج الري والتسميد الحالي"
+      ],
+      "image_analysis": {
+        "green_ratio": 0.62,
+        "yellow_ratio": 0.079,
+        "brown_ratio": 0.007,
+        "health_score": 0.538,
+        "plant_pixels": 308080,
+        "image_stress": "Healthy"
+      }
+    }
+  },
+  {
+    "timestamp": "2026-04-19 20:06:07",
+    "request_type": "predict_with_image",
+    "image_filename": "Black-Spot-Diplocarpon-rosae-GettyImages-1097545284.jpg",
+    "image_analysis": {
+      "green_ratio": 0.458,
+      "yellow_ratio": 0.27,
+      "brown_ratio": 0.012,
+      "health_score": 0.197,
+      "plant_pixels": 252094,
+      "image_stress": "High Stress"
+    },
+    "result": {
+      "status": "Infected",
+      "disease_name": "Severe Plant Stress",
+      "confidence": 0.197,
+      "recommendations": [
+        "إزالة الأوراق المصابة فوراً",
+        "تحسين التهوية حول النبات",
+        "رش مبيد أو علاج مناسب حسب الحالة"
+      ],
+      "image_analysis": {
+        "green_ratio": 0.458,
+        "yellow_ratio": 0.27,
+        "brown_ratio": 0.012,
+        "health_score": 0.197,
+        "plant_pixels": 252094,
+        "image_stress": "High Stress"
+      }
+    }
+  },
+  {
+    "timestamp": "2026-04-19 20:24:53",
+    "request_type": "predict_with_image",
+    "image_filename": "WhatsApp Image 2026-04-19 at 8.06.28 PM.jpeg",
+    "image_analysis": {
+      "green_ratio": 0.458,
+      "yellow_ratio": 0.27,
+      "brown_ratio": 0.012,
+      "health_score": 0.197,
+      "plant_pixels": 252094,
+      "image_stress": "High Stress"
+    },
+    "result": {
+      "status": "Infected",
+      "disease_name": "Severe Plant Stress",
+      "confidence": 0.197,
+      "recommendations": [
+        "إزالة الأوراق المصابة فوراً",
+        "تحسين التهوية حول النبات",
+        "رش مبيد أو علاج مناسب حسب الحالة"
+      ],
+      "image_analysis": {
+        "green_ratio": 0.458,
+        "yellow_ratio": 0.27,
+        "brown_ratio": 0.012,
+        "health_score": 0.197,
+        "plant_pixels": 252094,
+        "image_stress": "High Stress"
+      }
+    }
+  },
+  {
+    "timestamp": "2026-04-19 20:38:02",
+    "request_type": "predict_with_image",
+    "image_filename": "Black-Spot-Diplocarpon-rosae-GettyImages-1097545284.jpg",
+    "image_analysis": {
+      "green_ratio": 0.458,
+      "yellow_ratio": 0.27,
+      "brown_ratio": 0.012,
+      "health_score": 0.197,
+      "plant_pixels": 252094,
+      "image_stress": "High Stress"
+    },
+    "result": {
+      "status": "Infected",
+      "disease_name": "Nutrient Deficiency (Nitrogen or Iron)",
+      "confidence": 0.197,
+      "recommendations": [
+        "إضافة سماد نيتروجيني أو عناصر صغرى مثل الحديد",
+        "مراجعة pH التربة أو المحلول المغذي",
+        "تحسين برنامج التسميد ومتابعة الأوراق الحديثة"
+      ],
+      "analysis": {
+        "green_ratio": 0.458,
+        "yellow_ratio": 0.27,
+        "brown_ratio": 0.012,
+        "health_score": 0.197,
+        "plant_pixels": 252094,
+        "image_stress": "High Stress"
+      }
+    }
+  },
+  {
+    "timestamp": "2026-04-19 20:39:56",
+    "request_type": "predict_with_image",
+    "image_filename": "WhatsApp Image 2026-04-19 at 8.06.28 PM.jpeg",
+    "image_analysis": {
+      "green_ratio": 0.458,
+      "yellow_ratio": 0.27,
+      "brown_ratio": 0.012,
+      "health_score": 0.197,
+      "plant_pixels": 252094,
+      "image_stress": "High Stress"
+    },
+    "result": {
+      "status": "Infected",
+      "disease_name": "Nutrient Deficiency (Nitrogen or Iron)",
+      "confidence": 0.197,
+      "recommendations": [
+        "إضافة سماد نيتروجيني أو عناصر صغرى مثل الحديد",
+        "مراجعة pH التربة أو المحلول المغذي",
+        "تحسين برنامج التسميد ومتابعة الأوراق الحديثة"
+      ],
+      "analysis": {
+        "green_ratio": 0.458,
+        "yellow_ratio": 0.27,
+        "brown_ratio": 0.012,
+        "health_score": 0.197,
+        "plant_pixels": 252094,
+        "image_stress": "High Stress"
+      }
+    }
+  },
+  {
+    "timestamp": "2026-04-19 20:41:17",
+    "request_type": "predict_with_image",
+    "image_filename": "WhatsApp Image 2026-04-19 at 8.06.28 PM.jpeg",
+    "image_analysis": {
+      "green_ratio": 0.458,
+      "yellow_ratio": 0.27,
+      "brown_ratio": 0.012,
+      "health_score": 0.197,
+      "plant_pixels": 252094,
+      "image_stress": "High Stress"
+    },
+    "result": {
+      "status": "Infected",
+      "disease_name": "Nutrient Deficiency (Nitrogen or Iron)",
+      "confidence": 0.197,
+      "recommendations": [
+        "إضافة سماد نيتروجيني أو عناصر صغرى مثل الحديد",
+        "مراجعة pH التربة أو المحلول المغذي",
+        "تحسين برنامج التسميد ومتابعة الأوراق الحديثة"
+      ],
+      "analysis": {
+        "green_ratio": 0.458,
+        "yellow_ratio": 0.27,
+        "brown_ratio": 0.012,
+        "health_score": 0.197,
+        "plant_pixels": 252094,
+        "image_stress": "High Stress"
+      }
+    }
+  },
+  {
+    "timestamp": "2026-04-19 20:41:42",
+    "request_type": "predict_with_image",
+    "image_filename": "WhatsApp Image 2026-04-19 at 8.06.28 PM.jpeg",
+    "image_analysis": {
+      "green_ratio": 0.458,
+      "yellow_ratio": 0.27,
+      "brown_ratio": 0.012,
+      "health_score": 0.197,
+      "plant_pixels": 252094,
+      "image_stress": "High Stress"
+    },
+    "result": {
+      "status": "Infected",
+      "disease_name": "Nutrient Deficiency (Nitrogen or Iron)",
+      "confidence": 0.197,
+      "recommendations": [
+        "إضافة سماد نيتروجيني أو عناصر صغرى مثل الحديد",
+        "مراجعة pH التربة أو المحلول المغذي",
+        "تحسين برنامج التسميد ومتابعة الأوراق الحديثة"
+      ],
+      "analysis": {
+        "green_ratio": 0.458,
+        "yellow_ratio": 0.27,
+        "brown_ratio": 0.012,
+        "health_score": 0.197,
+        "plant_pixels": 252094,
+        "image_stress": "High Stress"
+      }
+    }
+  },
+  {
+    "timestamp": "2026-04-19 20:42:08",
+    "request_type": "predict_with_image",
+    "image_filename": "WhatsApp Image 2026-04-19 at 8.06.28 PM.jpeg",
+    "image_analysis": {
+      "green_ratio": 0.458,
+      "yellow_ratio": 0.27,
+      "brown_ratio": 0.012,
+      "health_score": 0.197,
+      "plant_pixels": 252094,
+      "image_stress": "High Stress"
+    },
+    "result": {
+      "status": "Infected",
+      "disease_name": "Nutrient Deficiency (Nitrogen or Iron)",
+      "confidence": 0.197,
+      "recommendations": [
+        "إضافة سماد نيتروجيني أو عناصر صغرى مثل الحديد",
+        "مراجعة pH التربة أو المحلول المغذي",
+        "تحسين برنامج التسميد ومتابعة الأوراق الحديثة"
+      ],
+      "analysis": {
+        "green_ratio": 0.458,
+        "yellow_ratio": 0.27,
+        "brown_ratio": 0.012,
+        "health_score": 0.197,
+        "plant_pixels": 252094,
+        "image_stress": "High Stress"
+      }
+    }
+  },
+  {
+    "timestamp": "2026-04-19 20:44:14",
+    "request_type": "predict_with_image",
+    "image_filename": "WhatsApp Image 2026-04-19 at 8.06.28 PM.jpeg",
+    "image_analysis": {
+      "green_ratio": 0.458,
+      "yellow_ratio": 0.27,
+      "brown_ratio": 0.012,
+      "health_score": 0.197,
+      "plant_pixels": 252094,
+      "image_stress": "High Stress"
+    },
+    "result": {
+      "status": "Infected",
+      "disease_name": "Nutrient Deficiency (Nitrogen or Iron)",
+      "confidence": 0.197,
+      "recommendations": [
+        "إضافة سماد نيتروجيني أو عناصر صغرى مثل الحديد",
+        "مراجعة pH التربة أو المحلول المغذي",
+        "تحسين برنامج التسميد ومتابعة الأوراق الحديثة"
+      ],
+      "analysis": {
+        "green_ratio": 0.458,
+        "yellow_ratio": 0.27,
+        "brown_ratio": 0.012,
+        "health_score": 0.197,
+        "plant_pixels": 252094,
+        "image_stress": "High Stress"
+      }
+    }
+  },
+  {
+    "timestamp": "2026-04-19 22:05:28",
+    "request_type": "predict_with_image",
+    "image_filename": "Black-Spot-Diplocarpon-rosae-GettyImages-1097545284.jpg",
+    "image_analysis": {
+      "green_ratio": 0.458,
+      "yellow_ratio": 0.27,
+      "brown_ratio": 0.012,
+      "health_score": 0.197,
+      "plant_pixels": 252094,
+      "image_stress": "High Stress"
+    },
+    "result": {
+      "status": "Infected",
+      "disease_name": "Nutrient Deficiency (Nitrogen or Iron)",
+      "confidence": 0.197,
+      "recommendations": [
+        "إضافة سماد نيتروجيني أو عناصر صغرى مثل الحديد",
+        "مراجعة pH التربة أو المحلول المغذي",
+        "تحسين برنامج التسميد ومتابعة الأوراق الحديثة"
+      ],
+      "analysis": {
+        "green_ratio": 0.458,
+        "yellow_ratio": 0.27,
+        "brown_ratio": 0.012,
+        "health_score": 0.197,
+        "plant_pixels": 252094,
+        "image_stress": "High Stress"
+      }
+    }
+  },
+  {
+    "timestamp": "2026-04-19 22:07:29",
+    "request_type": "predict_with_image",
+    "image_filename": "Black-Spot-Diplocarpon-rosae-GettyImages-1097545284.jpg",
+    "image_analysis": {
+      "green_ratio": 0.458,
+      "yellow_ratio": 0.27,
+      "brown_ratio": 0.012,
+      "health_score": 0.197,
+      "plant_pixels": 252094,
+      "image_stress": "High Stress"
+    },
+    "result": {
+      "status": "Infected",
+      "disease_name": "Nutrient Deficiency (Nitrogen or Iron)",
+      "confidence": 0.197,
+      "recommendations": [
+        "إضافة سماد نيتروجيني أو عناصر صغرى مثل الحديد",
+        "مراجعة pH التربة أو المحلول المغذي",
+        "تحسين برنامج التسميد ومتابعة الأوراق الحديثة"
+      ],
+      "analysis": {
+        "green_ratio": 0.458,
+        "yellow_ratio": 0.27,
+        "brown_ratio": 0.012,
+        "health_score": 0.197,
+        "plant_pixels": 252094,
+        "image_stress": "High Stress"
+      }
+    }
+  },
+  {
+    "timestamp": "2026-04-19 22:10:59",
+    "request_type": "predict_with_image",
+    "image_filename": "Black-Spot-Diplocarpon-rosae-GettyImages-1097545284.jpg",
+    "image_analysis": {
+      "green_ratio": 0.458,
+      "yellow_ratio": 0.27,
+      "brown_ratio": 0.012,
+      "health_score": 0.197,
+      "plant_pixels": 252094,
+      "image_stress": "High Stress"
+    },
+    "result": {
+      "status": "Detected",
+      "cropType": "Unknown",
+      "disease_name": "Nutrient Deficiency",
+      "confidence": 0.197,
+      "recommendations": [
+        "مراجعة برنامج التسميد",
+        "فحص العناصر الصغرى",
+        "مراجعة pH"
+      ],
+      "analysis": {
+        "green_ratio": 0.458,
+        "yellow_ratio": 0.27,
+        "brown_ratio": 0.012,
+        "health_score": 0.197,
+        "plant_pixels": 252094,
+        "image_stress": "High Stress"
+      }
+    }
+  },
+  {
+    "timestamp": "2026-04-19 22:12:27",
+    "request_type": "predict_with_image",
+    "image_filename": "Black-Spot-Diplocarpon-rosae-GettyImages-1097545284.jpg",
+    "image_analysis": {
+      "green_ratio": 0.458,
+      "yellow_ratio": 0.27,
+      "brown_ratio": 0.012,
+      "health_score": 0.197,
+      "plant_pixels": 252094,
+      "image_stress": "High Stress"
+    },
+    "result": {
+      "status": "Detected",
+      "cropType": "Unknown",
+      "disease_name": "Nutrient Deficiency",
+      "confidence": 0.197,
+      "recommendations": [
+        "مراجعة برنامج التسميد",
+        "فحص العناصر الصغرى",
+        "مراجعة pH"
+      ],
+      "analysis": {
+        "green_ratio": 0.458,
+        "yellow_ratio": 0.27,
+        "brown_ratio": 0.012,
+        "health_score": 0.197,
+        "plant_pixels": 252094,
+        "image_stress": "High Stress"
+      }
+    }
+  },
+  {
+    "timestamp": "2026-04-19 22:17:54",
+    "request_type": "predict_with_image",
+    "image_filename": "Black-Spot-Diplocarpon-rosae-GettyImages-1097545284.jpg",
+    "crop_type": "Tomato",
+    "image_analysis": {
+      "green_ratio": 0.458,
+      "yellow_ratio": 0.27,
+      "brown_ratio": 0.012,
+      "health_score": 0.197,
+      "plant_pixels": 252094,
+      "image_stress": "High Stress"
+    },
+    "result": {
+      "status": "Detected",
+      "cropType": "Tomato",
+      "disease_name": "Nutrient Deficiency (Nitrogen or Iron) - Tomato",
+      "severity_score": 0.197,
+      "recommendations": [
+        "إضافة سماد نيتروجيني أو عناصر صغرى مثل الحديد",
+        "مراجعة pH التربة أو المحلول المغذي",
+        "تحسين برنامج التسميد",
+        "متابعة الأوراق الحديثة والقديمة"
+      ],
+      "analysis": {
+        "green_ratio": 0.458,
+        "yellow_ratio": 0.27,
+        "brown_ratio": 0.012,
+        "health_score": 0.197,
+        "plant_pixels": 252094,
+        "image_stress": "High Stress"
+      }
+    }
+  },
+  {
+    "timestamp": "2026-04-26 21:20:37",
+    "request_type": "mobile_predict",
+    "input": {
+      "cropType": "Tomato",
+      "temperature": 39,
+      "humidity": 25,
+      "soilMoisture": 18,
+      "soilTemp": 34,
+      "light": "Low"
+    },
+    "result": {
+      "status": "High Stress",
+      "final_status": "High Stress",
+      "confidence": {
+        "Healthy": 0.007,
+        "High Stress": 0.947,
+        "Moderate Stress": 0.047
+      },
+      "alert": true,
+      "severity": "high",
+      "summary": "النبات في حالة حرجة، ويجب التدخل السريع لتفادي تدهور الحالة.",
+      "general_recommendation": "النبات في حالة حرجة! يجب التدخل فورًا بفحص رطوبة التربة والعناصر الغذائية ودرجة الحرارة وتحسين الظروف البيئية.",
+      "diagnosis": {
+        "primary_issue": "إجهاد مائي وحراري",
+        "secondary_issue": "احتمال ضعف في كفاءة التبريد أو الري",
+        "explanation": "تم رصد انخفاض في رطوبة التربة مع ارتفاع في درجة الحرارة."
+      },
+      "risk_factors": [
+        {
+          "code": "LOW_SOIL_MOISTURE",
+          "label": "انخفاض رطوبة التربة",
+          "severity": "high",
+          "value": 18.0,
+          "ideal_range": "30-70"
+        },
+        {
+          "code": "HIGH_TEMPERATURE",
+          "label": "ارتفاع درجة الحرارة",
+          "severity": "medium",
+          "value": 39.0,
+          "ideal_range": "20-35"
+        },
+        {
+          "code": "LOW_HUMIDITY",
+          "label": "انخفاض الرطوبة الجوية",
+          "severity": "medium",
+          "value": 25.0,
+          "ideal_range": "40-80"
+        },
+        {
+          "code": "HIGH_SOIL_TEMP",
+          "label": "ارتفاع حرارة التربة",
+          "severity": "medium",
+          "value": 34.0,
+          "ideal_range": "18-30"
+        },
+        {
+          "code": "LOW_LIGHT",
+          "label": "ضعف الإضاءة",
+          "severity": "medium",
+          "value": "Low",
+          "ideal_range": "Sufficient"
+        }
+      ],
+      "recommendations": [
+        "🚨 النبات (Tomato) في حالة حرجة ويحتاج تدخلًا فوريًا.",
+        "🌡️ درجة الحرارة مرتفعة؛ حسّن التهوية أو التبريد.",
+        "💧 رطوبة التربة منخفضة؛ زوّد الري تدريجيًا وراقب الاستجابة.",
+        "🌫️ الرطوبة الجوية منخفضة؛ قد يزيد ذلك من الإجهاد المائي.",
+        "🌱 حرارة التربة مرتفعة؛ راقب منطقة الجذور جيدًا.",
+        "☀️ الإضاءة ضعيفة؛ زوّد الضوء أو مدة التعرض."
+      ],
+      "actions": [
+        {
+          "priority": 1,
+          "code": "IRRIGATION_UP",
+          "title": "زيادة الري تدريجيًا",
+          "details": "رطوبة التربة أقل من النطاق المناسب."
+        },
+        {
+          "priority": 2,
+          "code": "COOLING_ON",
+          "title": "تحسين التهوية أو التبريد",
+          "details": "درجة الحرارة أعلى من النطاق المناسب."
+        },
+        {
+          "priority": 2,
+          "code": "ROOTZONE_COOL",
+          "title": "خفض حرارة منطقة الجذور",
+          "details": "حرارة التربة مرتفعة."
+        },
+        {
+          "priority": 3,
+          "code": "HUMIDITY_UP",
+          "title": "رفع الرطوبة عند الحاجة",
+          "details": "الرطوبة منخفضة وقد تزيد الإجهاد."
+        },
+        {
+          "priority": 3,
+          "code": "LIGHT_UP",
+          "title": "زيادة الإضاءة",
+          "details": "الإضاءة الحالية غير كافية للنمو."
+        }
+      ],
+      "monitoring": [
+        "إعادة فحص رطوبة التربة بعد التعديل في الري.",
+        "مراقبة درجة الحرارة خلال الساعات القادمة.",
+        "متابعة تحسن النمو بعد تعديل الإضاءة."
+      ],
+      "backend_flags": {
+        "needs_irrigation": true,
+        "needs_drainage_check": false,
+        "needs_cooling": true,
+        "needs_heating": false,
+        "needs_light_adjustment": true,
+        "needs_humidity_adjustment": true,
+        "needs_urgent_attention": true
+      },
+      "notification": {
+        "send": true,
+        "title": "🚨 تحذير: حالة حرجة",
+        "message": "إجهاد مائي وحراري - الإجراء الفوري: زيادة الري تدريجيًا",
+        "type": "critical"
+      },
+      "timestamp": "2026-04-26 21:20:37"
+    }
+  }
+]

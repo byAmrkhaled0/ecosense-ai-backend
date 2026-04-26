@@ -1,0 +1,13 @@
+cropType,temperature,humidity,soilMoisture,soilTemp,light,status
+Tomato,30,60,45,22,Sufficient,Healthy
+Tomato,39,25,18,34,Low,High Stress
+Tomato,34,40,28,30,Medium,Moderate Stress
+Corn,29,55,42,24,Sufficient,Healthy
+Corn,37,35,25,32,Low,Moderate Stress
+Corn,41,22,15,35,Low,High Stress
+Pepper,28,65,50,23,Medium,Healthy
+Pepper,36,38,24,31,Low,Moderate Stress
+Pepper,40,28,16,34,Low,High Stress
+Mint,24,72,58,21,Medium,Healthy
+Mint,33,42,30,28,Medium,Moderate Stress
+Mint,37,30,20,32,Low,High Stress
