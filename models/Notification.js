@@ -18,8 +18,7 @@ const notificationSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    // تم إضافة 'alert' و 'success' للقائمة عشان الكود ميضربش
-    enum: ["info", "warning", "critical", "alert", "success"],
+    enum: ["warning", "info", "success", "danger", "disease"], // 👈 ضيف disease هنا
     default: "info",
   },
   isRead: {

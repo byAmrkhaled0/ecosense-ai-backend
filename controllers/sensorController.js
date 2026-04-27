@@ -5,9 +5,36 @@ const Notification = require("../models/Notification");
 const axios = require("axios");
 const mongoose = require("mongoose");
 
+// 1. دالة بسيطة لتنسيق نوع المحصول (لأن عمرو مستني Corn مش maize)
 /* ============================================================
-1️⃣ UPLOAD SENSOR DATA (استقبال البيانات وتحليلها)
-============================================================ */
+   HELPERS (التنسيق لمتطلبات الـ AI)
+   ============================================================ */
+const formatCropType = (crop) => {
+  const crops = {
+    maize: "Corn",
+    corn: "Corn",
+    tomato: "Tomato",
+    pepper: "Pepper",
+    mint: "Mint",
+  };
+  const normalized = String(crop || "").toLowerCase();
+  return crops[normalized] || "Corn";
+};
+
+const formatLightValue = (light) => {
+  const lightMap = {
+    high: "Sufficient",
+    medium: "Medium",
+    low: "Low",
+    sufficient: "Sufficient",
+  };
+  const normalized = String(light || "").toLowerCase();
+  return lightMap[normalized] || "Medium";
+};
+
+/* ============================================================
+   1️⃣ UPLOAD SENSOR DATA (استقبال البيانات وتحليلها)
+   ============================================================ */
 exports.uploadData = async (req, res) => {
   try {
     const { deviceSerial, temp, hum, Soil, soilTemp, light } = req.body;
@@ -18,7 +45,7 @@ exports.uploadData = async (req, res) => {
         .json({ success: false, message: "deviceSerial مطلوب" });
     }
 
-    // 1. البحث عن الجهاز وعمل Populate للقطاع عشان نوصل للعامل والمالك
+    // 1. البحث عن الجهاز وعمل Populate للقطاع
     const device = await Device.findOne({ deviceSerial }).populate("sectorId");
 
     if (!device || !device.sectorId) {
@@ -31,39 +58,48 @@ exports.uploadData = async (req, res) => {
     const sector = device.sectorId;
     const finalOwnerId = device.ownerId || sector.ownerId;
     const finalSectorId = sector._id;
-    const assignedWorkerId = sector.assignedWorker; // 👈 هنجيب الـ ID بتاع العامل من هنا
+    const assignedWorkerId = sector.assignedWorker;
 
-    // 2. محاولة الاتصال بسيرفر الـ AI (نفس الكود بتاعك)
+    // 2. محاولة الاتصال بسيرفر الـ AI
     let aiAnalysis = {
       status: "Unknown",
       recommendation: "سيرفر الـ AI غير متصل",
     };
+    let aiRawResponse = null;
+
     try {
       const aiResponse = await axios.post(
-        process.env.AI_API_URL || "http://127.0.0.1:8000/predict",
+        process.env.AI_API_URL ||
+          "https://Amrkhaled2004.pythonanywhere.com/api/mobile_predict",
         {
-          cropType: sector.cropType || "general",
-          temperature: temp,
-          humidity: hum,
-          soilMoisture: Soil,
-          soilTemp: soilTemp,
-          light: light,
+          cropType: formatCropType(sector.cropType),
+          temperature: Number(temp),
+          humidity: Number(hum),
+          soilMoisture: Number(Soil),
+          soilTemp: Number(soilTemp),
+          light: formatLightValue(light),
         },
-        { timeout: 4000 },
+        {
+          headers: { "ngrok-skip-browser-warning": "true" },
+          timeout: 8000,
+        },
       );
-      if (aiResponse.data) {
+
+      aiRawResponse = aiResponse.data;
+      if (aiRawResponse) {
         aiAnalysis = {
-          status: aiResponse.data.status || "Unknown",
-          recommendation: aiResponse.data.recommendations
-            ? aiResponse.data.recommendations.join(" | ")
+          status: aiRawResponse.status || "Unknown",
+          recommendation: aiRawResponse.recommendations
+            ? aiRawResponse.recommendations.join(" | ")
             : "لا توجد توصيات",
         };
       }
     } catch (aiErr) {
-      console.log("⚠️ AI Server unreachable");
+      console.log("⚠️ AI Server unreachable:", aiErr.message);
+      // هنا aiAnalysis هتفضل شايلة القيم الافتراضية "غير متصل"
     }
 
-    // 3. حفظ القراءة
+    // 3. حفظ القراءة في الداتابيز
     const newData = await SensorData.create({
       ownerId: finalOwnerId,
       sectorId: finalSectorId,
@@ -74,55 +110,52 @@ exports.uploadData = async (req, res) => {
       analysis: aiAnalysis,
     });
 
-    // 4. تحديث حالة الجهاز
+    // 4. تحديث حالة الجهاز (Online)
     await Device.findByIdAndUpdate(device._id, {
       status: "online",
       lastPing: Date.now(),
     });
 
-    // 5. 🔔 نظام التنبيهات المطور (للمالك والعامل)
+    // 5. 🔔 نظام التنبيهات الذكي
+    // بنحدد حالات الخطر (لو عمرو قال خطر، أو لو السنسورز قرت أرقام خيالية)
+    const criticalStatuses = ["High Stress", "Danger", "Critical", "Warning"];
     const isCritical =
-      temp > 45 ||
-      Soil < 10 ||
-      aiAnalysis.status === "Danger" ||
-      aiAnalysis.status === "Critical";
+      Number(temp) > 45 ||
+      Number(Soil) < 10 ||
+      criticalStatuses.includes(aiAnalysis.status);
 
     if (isCritical) {
       const io = req.app.get("io");
 
+      // جهز بيانات الإشعار
       const socketPayload = {
         title: "🚨 تنبيه خطر فوري",
-        message: `خطر في قطاع (${sector.name}). الحالة: ${aiAnalysis.status}`,
+        message: `القطاع: ${sector.name} | الحالة: ${aiAnalysis.status} | حرارة: ${temp}°C`,
         sectorId: finalSectorId,
         createdAt: new Date(),
       };
 
-      // 1️⃣ إرسال الإشعار للمالك (Owner)
-      // تأكد إن المالك عمل join لغرفة باسم الـ ID بتاعه عند الاتصال
-      io.to(finalOwnerId.toString()).emit("newNotification", socketPayload);
-
-      // 2️⃣ إرسال الإشعار للعامل (Worker) إذا وجد
-      if (assignedWorkerId) {
+      // 1. ابعت الإشعار "حالا" للموبايل (Socket.io)
+      if (finalOwnerId)
+        io.to(finalOwnerId.toString()).emit("newNotification", socketPayload);
+      if (assignedWorkerId)
         io.to(assignedWorkerId.toString()).emit(
           "newNotification",
           socketPayload,
         );
-      }
 
-      // 3️⃣ خطوة احترافية: حفظ الإشعارات في قاعدة البيانات
-      // عشان تظهر في "سجل التنبيهات" للمالك والعامل لما يفتحوا الأبلكيشن
-      const notificationData = [
-        {
-          recipient: finalOwnerId,
-          sectorId: finalSectorId,
-          title: socketPayload.title,
-          message: socketPayload.message,
-          type: "warning",
-        },
-      ];
+      // 2. احفظ الإشعار في الداتابيز عشان يفضل موجود في الهيستوري (للحالات الحرجة فقط)
+      const notificationsToSave = [];
+      notificationsToSave.push({
+        recipient: finalOwnerId,
+        sectorId: finalSectorId,
+        title: socketPayload.title,
+        message: socketPayload.message,
+        type: "warning",
+      });
 
       if (assignedWorkerId) {
-        notificationData.push({
+        notificationsToSave.push({
           recipient: assignedWorkerId,
           sectorId: finalSectorId,
           title: socketPayload.title,
@@ -131,16 +164,13 @@ exports.uploadData = async (req, res) => {
         });
       }
 
-      // حفظ الكل مرة واحدة في الداتابيز
-      await Notification.insertMany(notificationData);
-
-      console.log(
-        `✅ تم إرسال التنبيه للمالك ${finalOwnerId} ${assignedWorkerId ? "والعامل " + assignedWorkerId : ""}`,
-      );
+      await Notification.insertMany(notificationsToSave);
+      console.log(`📢 Alert saved and sent for sector: ${sector.name}`);
     }
 
     res.status(201).json({ success: true, data: newData });
   } catch (err) {
+    console.error("❌ General Error:", err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 };

@@ -3,100 +3,115 @@ const User = require("../models/User");
 const Device = require("../models/Device");
 const SensorData = require("../models/SensorData");
 const Notification = require("../models/Notification");
+const ImageLog = require("../models/ImageLog"); // ضيفنا موديل الصور
 
 exports.getDashboard = async (req, res) => {
   try {
-    const userRole = req.user.role;
-    const userId = req.user._id;
+    const { role: userRole, _id: userId } = req.user;
 
-    // --- 1️⃣ حالة المالك (Owner) ---
+    // --- 1️⃣ حالة المالك (Owner) - النظرة الشاملة ---
     if (userRole === "owner") {
-      // تعديل: البحث بـ ownerId بدل owner ليتوافق مع الموديلات الجديدة
-      const totalSectors = await Sector.countDocuments({ ownerId: userId });
-      const totalWorkers = await User.countDocuments({
-        ownerId: userId,
-        role: "worker",
-      });
-      const totalDevices = await Device.countDocuments({ ownerId: userId });
-      const onlineDevices = await Device.countDocuments({
-        ownerId: userId,
-        status: "online",
-      });
+      // تنفيذ كل الاستعلامات في نفس الوقت (أسرع بكتير)
+      const [
+        sectorsCount,
+        workersCount,
+        devices,
+        sectors,
+        recentNotifications,
+        aiStats,
+      ] = await Promise.all([
+        Sector.countDocuments({ ownerId: userId }),
+        User.countDocuments({ ownerId: userId, role: "worker" }),
+        Device.find({ ownerId: userId }).select("status"),
+        Sector.find({ ownerId: userId }).populate(
+          "assignedWorker",
+          "firstName lastName",
+        ),
+        Notification.find({ recipient: userId })
+          .sort("-createdAt")
+          .limit(5)
+          .populate("sectorId", "name"),
+        // إحصائية سريعة: كام صورة تم تحليلها ووجد بها إصابة؟
+        ImageLog.countDocuments({
+          ownerId: userId,
+          "analysisResult.status": "Infected",
+        }),
+      ]);
 
-      // جلب القطاعات مع بيانات العامل
-      const sectors = await Sector.find({ ownerId: userId }).populate(
-        "assignedWorker",
-        "firstName lastName phoneNumber",
-      );
-
-      // التنبيهات (Notification تستخدم recipient أو ownerId حسب تصميمك، هنا ثبتناها ownerId)
-      const recentAlerts = await Notification.find({ recipient: userId })
-        .sort("-createdAt")
-        .limit(5)
-        .populate("sectorId", "name");
+      const onlineDevices = devices.filter((d) => d.status === "online").length;
 
       return res.status(200).json({
         success: true,
         role: "owner",
         data: {
           summary: {
-            sectorsCount: totalSectors,
-            workersCount: totalWorkers,
-            devicesCount: totalDevices,
-            onlineDevices: onlineDevices,
+            totalSectors: sectorsCount,
+            totalWorkers: workersCount,
+            totalDevices: devices.length,
+            onlineDevices,
+            infectedPlantsAlerts: aiStats, // عدد الحالات المصابة المكتشفة
           },
-          sectors: sectors,
-          notifications: recentAlerts,
+          sectors,
+          notifications: recentNotifications,
         },
       });
     }
 
-    // --- 2️⃣ حالة العامل (Worker) ---
+    // --- 2️⃣ حالة العامل (Worker) - التشغيل الميداني ---
     if (userRole === "worker") {
-      // تعديل: العامل بيبحث عن القطاعات اللي هو "assignedWorker" فيها
       const sector = await Sector.findOne({ assignedWorker: userId });
 
       if (!sector) {
-        return res.status(404).json({
-          success: false,
-          message: "لم يتم تعيين قطاع لك بعد.",
-        });
+        return res
+          .status(404)
+          .json({ success: false, message: "لم يتم تعيين قطاع لك بعد." });
       }
 
-      // جلب آخر قراءة حساسات (تعديل: السنسور بيستخدم createdAt مش timestamp)
-      const latestReadings = await SensorData.findOne({ sectorId: sector._id })
-        .sort("-createdAt")
-        .lean();
+      // جلب القراءات والصور والتنبيهات للقطاع في وقت واحد
+      const [latestReadings, recentImages, notifications] = await Promise.all([
+        SensorData.findOne({ sectorId: sector._id }).sort("-createdAt").lean(),
+        ImageLog.find({ sectorId: sector._id }).sort("-createdAt").limit(3), // آخر 3 صور تم التقاطها
+        Notification.find({ sectorId: sector._id, recipient: userId })
+          .sort("-createdAt")
+          .limit(5),
+      ]);
 
-      // التنبيهات الخاصة بقطاعه
-      const sectorNotifications = await Notification.find({
-        sectorId: sector._id,
-      })
-        .sort("-createdAt")
-        .limit(5);
+      // إضافة "تقييم حالة" سريع للعامل
+      const healthStatus = {
+        isSystemCritical:
+          latestReadings?.temperature > 40 || latestReadings?.humidity < 20,
+        lastDiagnostic: recentImages[0]?.analysisResult?.status || "No Data",
+      };
 
       return res.status(200).json({
         success: true,
         role: "worker",
         data: {
-          assignedSector: sector,
-          latestReadings: latestReadings || "لا توجد قراءات حتى الآن",
-          notifications: sectorNotifications,
+          sectorInfo: sector,
+          sensorInsights: latestReadings || "لا توجد قراءات",
+          recentDiagnostics: recentImages,
+          healthStatus, // ملخص الحالة (خطر أم آمن)
+          notifications,
         },
       });
     }
 
     // --- 3️⃣ حالة الأدمن ---
     if (userRole === "admin") {
-      const totalUsers = await User.countDocuments();
-      const totalAllDevices = await Device.countDocuments();
+      const [totalUsers, totalDevices, totalSectors] = await Promise.all([
+        User.countDocuments(),
+        Device.countDocuments(),
+        Sector.countDocuments(),
+      ]);
       return res.status(200).json({
         success: true,
         role: "admin",
-        data: { totalUsers, totalAllDevices },
+        data: { totalUsers, totalDevices, totalSectors },
       });
     }
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res
+      .status(500)
+      .json({ success: false, message: "خطأ في تحميل بيانات الداشبورد" });
   }
 };

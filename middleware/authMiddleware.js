@@ -14,12 +14,10 @@ exports.protect = async (req, res, next) => {
   }
 
   if (!token) {
-    return res
-      .status(401)
-      .json({
-        success: false,
-        message: "غير مسموح لك بالدخول، يرجى تسجيل الدخول أولاً.",
-      });
+    return res.status(401).json({
+      success: false,
+      message: "غير مسموح لك بالدخول، يرجى تسجيل الدخول أولاً.",
+    });
   }
 
   try {
@@ -30,22 +28,18 @@ exports.protect = async (req, res, next) => {
     req.user = await User.findById(decoded.id);
 
     if (!req.user) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: "المستخدم المرتبط بهذا الـ Token غير موجود.",
-        });
+      return res.status(404).json({
+        success: false,
+        message: "المستخدم المرتبط بهذا الـ Token غير موجود.",
+      });
     }
 
     next();
   } catch (err) {
-    return res
-      .status(401)
-      .json({
-        success: false,
-        message: "الـ Token غير صالح أو انتهت صلاحيته.",
-      });
+    return res.status(401).json({
+      success: false,
+      message: "الـ Token غير صالح أو انتهت صلاحيته.",
+    });
   }
 };
 

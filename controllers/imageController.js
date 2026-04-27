@@ -6,44 +6,56 @@ const Sector = require("../models/Sector");
 const Notification = require("../models/Notification"); // ضفنا الموديل ده
 const mongoose = require("mongoose");
 const Device = require("../models/Device");
-
 /* ============================================================
     1️⃣ UPLOAD & AI ANALYZE (رفع الصورة وتحليلها)
 ============================================================ */
 exports.uploadImage = async (req, res) => {
   try {
     const { deviceSerial, sectorId } = req.body;
-
-    // 1️⃣ تعريف المتغيرات بره الـ if عشان تكون مرئية للكود كله
-    let finalSectorId, finalOwnerId, finalWorkerId, uploadedBy, device;
+    let finalSectorId,
+      finalOwnerId,
+      finalWorkerId,
+      uploadedBy,
+      device,
+      cropType;
+    let captureReason = "Manual Scan";
 
     if (!req.file) {
       return res.status(400).json({ success: false, message: "يرجى رفع صورة" });
     }
 
-    // --- حالة 1: الرفع عن طريق جهاز IoT (Serial) ---
+    // --- حالة 1: تصوير آلي (IoT - ESP32-CAM) ---
     if (deviceSerial) {
+      // بنجيب الجهاز ونعمل Populate للقطاع عشان نجيب نوع الزرعة والمكان
       device = await Device.findOne({ deviceSerial }).populate("sectorId");
+
       if (!device || !device.sectorId) {
-        return res
-          .status(404)
-          .json({ success: false, message: "الجهاز غير مربوط بقطاع" });
+        return res.status(404).json({
+          success: false,
+          message: "هذا الجهاز غير مسجل أو غير مربوط بقطاع زراعي",
+        });
       }
+
       finalSectorId = device.sectorId._id;
       finalOwnerId = device.sectorId.ownerId;
       finalWorkerId = device.sectorId.assignedWorker;
+      cropType = device.sectorId.cropType || "Unknown"; // هنجيب نوع الزرعة أوتوماتيك
       uploadedBy = null;
-    }
+      captureReason = "Automatic Camera";
 
-    // --- حالة 2: الرفع يدوي (Token) ---
+      console.log(
+        `📡 IoT Device [${deviceSerial}] detected in Sector: ${device.sectorId.name} | Crop: ${cropType}`,
+      );
+    }
+    // --- حالة 2: تصوير يدوي (Mobile App) ---
     else if (req.user) {
-      const targetSectorId = sectorId; // تأكد إنك باعت الـ id في الـ body
-      if (!targetSectorId)
+      // في حالة الموبايل، لسه محتاجين الـ sectorId عشان نعرف اليوزر بيصور في أنهي حتة
+      if (!sectorId)
         return res
           .status(400)
-          .json({ success: false, message: "sectorId مطلوب" });
+          .json({ success: false, message: "sectorId مطلوب للفحص اليدوي" });
 
-      const sector = await Sector.findById(targetSectorId);
+      const sector = await Sector.findById(sectorId);
       if (!sector)
         return res
           .status(404)
@@ -52,52 +64,111 @@ exports.uploadImage = async (req, res) => {
       finalSectorId = sector._id;
       finalOwnerId = sector.ownerId;
       finalWorkerId = sector.assignedWorker;
+      cropType = sector.cropType || "Unknown";
       uploadedBy = req.user._id;
+      captureReason = "Manual Scan";
     } else {
-      return res
-        .status(401)
-        .json({ success: false, message: "يجب توفير Serial أو Token" });
+      return res.status(401).json({
+        success: false,
+        message: "يجب توفير Serial الجهاز أو Token المستخدم",
+      });
     }
 
-    // 2️⃣ دلوقتي المتغيرات دي (finalOwnerId, etc) بقت متشافة هنا
     const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
 
-    // تحليل الـ AI (كود الـ axios بتاعك هنا)
+    // --- (جزء تحليل الـ AI) ---
     let aiAnalysis = {
-      status: "Healthy",
-      diseaseName: "None",
+      status: "Unknown",
+      diseaseName: "تحليل غير متاح",
       confidence: 0,
-      recommendation: "النبات سليم",
+      recommendation: "سيرفر الـ AI لا يستجيب",
     };
 
-    // 3️⃣ حفظ السجل في الداتابيز
+    try {
+      const formData = new FormData();
+      // إرفاق الصورة
+      formData.append(
+        "file",
+        req.file.buffer || require("fs").createReadStream(req.file.path),
+        {
+          filename: req.file.originalname,
+          contentType: req.file.mimetype,
+        },
+      );
+
+      // 🚀 إضافة نوع المحصول لعمرو
+      formData.append("cropType", cropType);
+
+      const aiResponse = await axios.post(
+        "https://Amrkhaled2004.pythonanywhere.com/api/predict_with_image",
+        formData,
+        {
+          headers: {
+            ...formData.getHeaders(),
+            "ngrok-skip-browser-warning": "true",
+          },
+          timeout: 15000,
+        },
+      );
+
+      // ... (باقي كود معالجة الرد aiResponse.data يفضل كما هو)
+      if (aiResponse.data) {
+        const analysisData =
+          aiResponse.data.analysis || aiResponse.data.image_analysis;
+        let conf = parseFloat(aiResponse.data.confidence);
+        conf = isNaN(conf) ? 0 : conf;
+
+        aiAnalysis = {
+          status: aiResponse.data.status || "Infected",
+          diseaseName: aiResponse.data.disease_name || "Severe Plant Stress",
+          confidence: conf,
+          recommendation: aiResponse.data.recommendations
+            ? aiResponse.data.recommendations.join(" | ")
+            : "يرجى مراجعة المختص",
+        };
+
+        if (analysisData) {
+          const g = parseFloat(analysisData.green_ratio || 0) * 100;
+          const y = parseFloat(analysisData.yellow_ratio || 0) * 100;
+          const b = parseFloat(analysisData.brown_ratio || 0) * 100;
+          aiAnalysis.recommendation += ` [تحليل الألوان: أخضر ${g.toFixed(1)}% | أصفر ${y.toFixed(1)}% | بني ${b.toFixed(1)}%]`;
+        }
+      }
+    } catch (aiErr) {
+      console.log("⚠️ Image AI Server Error:", aiErr.message);
+    }
+
+    // حفظ السجل في الداتابيز
     const newImageLog = await ImageLog.create({
       ownerId: finalOwnerId,
       sectorId: finalSectorId,
       imageUrl: imageUrl,
       capturedBy: uploadedBy || finalOwnerId,
       analysisResult: aiAnalysis,
-      deviceId: device?._id, // الـ Optional Chaining مهم هنا
+      deviceId: device?._id,
+      captureReason: captureReason,
     });
 
-    // 4️⃣ الإشعارات (إرسال للمالك والعامل)
+    // 4️⃣ الإشعارات (تخصيص الرسالة)
     if (aiAnalysis.status !== "Healthy") {
       const io = req.app.get("io");
       const notificationData = {
         title: "🚨 تنبيه صحة النبات",
-        message: `تم رصد إصابة (${aiAnalysis.diseaseName}) في قطاعك.`,
+        // الرسالة تتغير حسب مين اللي صور
+        message:
+          captureReason === "Manual Scan"
+            ? `نتائج الفحص اليدوي: رصد (${aiAnalysis.diseaseName}).`
+            : `الكاميرا الآلية رصدت إصابة (${aiAnalysis.diseaseName}).`,
         type: "disease",
         sectorId: finalSectorId,
       };
 
-      // المالك
       const nOwner = await Notification.create({
         ...notificationData,
         recipient: finalOwnerId,
       });
       io.to(finalOwnerId.toString()).emit("newNotification", nOwner);
 
-      // العامل
       if (finalWorkerId) {
         const nWorker = await Notification.create({
           ...notificationData,
@@ -109,11 +180,9 @@ exports.uploadImage = async (req, res) => {
 
     res.status(201).json({ success: true, data: newImageLog });
   } catch (err) {
-    // لو حصل Error هنا هيرجع رسالة واضحة
     res.status(500).json({ success: false, error: err.message });
   }
 };
-
 /* ============================================================
     2️⃣ GET IMAGE HISTORY (عرض التاريخ بتعدد القطاعات)
 ============================================================ */

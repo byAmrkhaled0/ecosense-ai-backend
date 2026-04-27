@@ -1,4 +1,5 @@
 const SensorData = require("../models/SensorData");
+const ImageLog = require("../models/ImageLog");
 const mongoose = require("mongoose");
 
 exports.getSectorStatsReport = async (req, res) => {
@@ -15,44 +16,69 @@ exports.getSectorStatsReport = async (req, res) => {
     startDate.setDate(startDate.getDate() - parseInt(days));
     startDate.setHours(0, 0, 0, 0);
 
+    const sId = new mongoose.Types.ObjectId(sectorId);
+
     const report = await SensorData.aggregate([
       {
         $match: {
-          // ✅ تأكدنا إن الـ ID بيتحول لـ ObjectId صح
-          sectorId: new mongoose.Types.ObjectId(sectorId),
+          sectorId: sId,
           createdAt: { $gte: startDate },
         },
       },
       {
         $group: {
-          _id: {
-            $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
-          },
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
           avgTemp: { $avg: "$air.temperature" },
+          maxTemp: { $max: "$air.temperature" }, // التعديل: إضافة أعلى حرارة
+          minTemp: { $min: "$air.temperature" }, // التعديل: إضافة أقل حرارة
           avgMoisture: { $avg: "$soil.moisture" },
           avgHumidity: { $avg: "$air.humidity" },
-          alertsCount: {
-            $sum: {
-              $cond: [
-                // ✅ تعديل الـ $in لتكون متوافقة مع الـ Aggregation
-                {
-                  $in: ["$analysis.status", ["Critical", "Warning", "Danger"]],
-                },
-                1,
-                0,
-              ],
-            },
-          },
         },
       },
-      // ✅ تقريب الأرقام العشرية عشان المنظر في الداشبورد يبقى نظيف
+      // التعديل الجوهري: ربط تقرير السنسورز بتقرير الصور (AI)
+      {
+        $lookup: {
+          from: "imagelogs",
+          let: { reportDate: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$sectorId", sId] },
+                    {
+                      $eq: [
+                        {
+                          $dateToString: {
+                            format: "%Y-%m-%d",
+                            date: "$createdAt",
+                          },
+                        },
+                        "$$reportDate",
+                      ],
+                    },
+                    { $eq: ["$analysisResult.status", "Infected"] },
+                  ],
+                },
+              },
+            },
+            { $count: "count" },
+          ],
+          as: "diseaseIncidents",
+        },
+      },
       {
         $project: {
           _id: 1,
           avgTemp: { $round: ["$avgTemp", 1] },
+          maxTemp: { $round: ["$maxTemp", 1] },
+          minTemp: { $round: ["$minTemp", 1] },
           avgMoisture: { $round: ["$avgMoisture", 1] },
           avgHumidity: { $round: ["$avgHumidity", 1] },
-          alertsCount: 1,
+          // تحويل نتيجة الـ lookup لرقم بسيط
+          totalDiseasesFound: {
+            $ifNull: [{ $arrayElemAt: ["$diseaseIncidents.count", 0] }, 0],
+          },
         },
       },
       { $sort: { _id: 1 } },
@@ -60,6 +86,7 @@ exports.getSectorStatsReport = async (req, res) => {
 
     res.status(200).json({
       success: true,
+      sectorId,
       daysRequested: days,
       count: report.length,
       data: report,
@@ -68,7 +95,6 @@ exports.getSectorStatsReport = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
-
 exports.exportToCSV = async (req, res) => {
   try {
     const { sectorId } = req.query;
@@ -79,52 +105,47 @@ exports.exportToCSV = async (req, res) => {
         .json({ success: false, message: "يجب تحديد معرف القطاع" });
     }
 
-    // ✅ التعديل: التأكد من تحويل الـ String لـ ObjectId في الـ Find برضه لو واجهت مشاكل
+    // جلب آخر 1000 قراءة لضمان شمولية التقرير
     const data = await SensorData.find({
       sectorId: new mongoose.Types.ObjectId(sectorId),
     })
       .sort("-createdAt")
-      .limit(500);
+      .limit(1000)
+      .lean();
 
     if (data.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "لا توجد بيانات لتصديرها لهذا القطاع",
-      });
+      return res
+        .status(404)
+        .json({ success: false, message: "لا توجد بيانات متاحة لهذا القطاع" });
     }
 
+    // إضافة Byte Order Mark (BOM) عشان الـ Excel يفهم إن الملف UTF-8 ويظهر العربي صح
     let csv = "\ufeff";
     csv +=
-      "التاريخ والوقت,درجة الحرارة,الرطوبة الجوية,رطوبة التربة,حالة النبات,التوصية\n";
+      "التاريخ,الوقت,الحرارة (C),الرطوبة الجوية (%),رطوبة التربة (%),الحالة التحذيرية\n";
 
     data.forEach((item) => {
-      // ✅ استخدام توقيت القاهرة أو توقيت محلي ثابت
-      const date = item.createdAt
-        ? item.createdAt.toLocaleString("ar-EG", { timeZone: "Africa/Cairo" })
-        : "غير مسجل";
+      const dateObj = new Date(item.createdAt);
+      const date = dateObj.toLocaleDateString("ar-EG");
+      const time = dateObj.toLocaleTimeString("ar-EG");
 
-      const temp = item.air?.temperature ?? "N/A";
-      const hum = item.air?.humidity ?? "N/A";
-      const soilMoist = item.soil?.moisture ?? "N/A";
-      const status = item.analysis?.status ?? "N/A";
+      const temp = item.air?.temperature ?? "-";
+      const hum = item.air?.humidity ?? "-";
+      const soil = item.soil?.moisture ?? "-";
+      const status = item.analysis?.status || "Normal";
 
-      // تنظيف التوصية من أي فواصل قد تبوظ ملف الـ CSV
-      const recommendation = item.analysis?.recommendation
-        ? item.analysis.recommendation.replace(/,/g, " - ")
-        : "لا يوجد";
-
-      csv += `${date},${temp},${hum},${soilMoist},${status},${recommendation}\n`;
+      csv += `${date},${time},${temp},${hum},${soil},${status}\n`;
     });
 
+    // إعدادات الرد لتحميل الملف
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=Report-${sectorId}-${Date.now()}.csv`,
+      `attachment; filename=Sector-Report-${Date.now()}.csv`,
     );
 
     return res.status(200).send(csv);
   } catch (err) {
-    console.error("Export Error:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 };

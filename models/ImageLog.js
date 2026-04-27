@@ -1,8 +1,13 @@
 const mongoose = require("mongoose");
 
+/**
+ * ImageLog Model
+ * سجل صور المحاصيل وتحليلات الذكاء الاصطناعي
+ * يدعم الفحص الآلي (عبر الكاميرات) والفحص اليدوي (عبر تطبيق الموبايل)
+ */
 const ImageLogSchema = new mongoose.Schema(
   {
-    // 👤 الشخص اللي صور (سواء صاحب المزرعة أو العامل)
+    // 👤 الشخص الذي قام بالالتقاط (صاحب المزرعة أو العامل)
     capturedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -10,7 +15,7 @@ const ImageLogSchema = new mongoose.Schema(
       index: true,
     },
 
-    // 👨‍🌾 صاحب المزرعة الأصلي (المالك الأساسي للداتا)
+    // 👨‍🌾 صاحب المزرعة (المالك الأساسي للبيانات)
     ownerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -18,7 +23,7 @@ const ImageLogSchema = new mongoose.Schema(
       index: true,
     },
 
-    // 📍 القطاع اللي الصورة اتأخدت فيه
+    // 📍 القطاع الذي تمت فيه عملية التصوير
     sectorId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Sector",
@@ -26,52 +31,51 @@ const ImageLogSchema = new mongoose.Schema(
       index: true,
     },
 
-    // 🖼️ رابط الصورة على السيرفر
+    // 🖼️ رابط الصورة المخزنة على السيرفر
     imageUrl: {
       type: String,
       required: [true, "Image URL is required"],
     },
 
     // 🧠 نتائج تحليل الذكاء الاصطناعي (AI Analysis)
+    // أضف هذه الحقول داخل analysisResult في ملف الموديل (ImageLog.js)
     analysisResult: {
-      status: {
-        type: String,
-        // تم تحديث القائمة لتشمل حالات المعالجة لضمان مرونة النظام
-        enum: ["Healthy", "Infected", "Pending", "Processing", "Unknown"],
-        default: "Pending",
-      },
-      diseaseName: {
-        type: String,
-        default: "None",
-      }, // اسم المرض المكتشف (مثلاً: Tomato Blight)
-      confidence: {
-        type: Number,
-        default: 0,
-      }, // نسبة التأكد من 0 لـ 100
-      recommendation: {
-        type: String,
-        default: null,
-      },
+      status: String,
+      diseaseName: String,
+      confidence: Number,
+      recommendation: String,
+      // الحقول الجديدة 👇
+      greenRatio: Number,
+      yellowRatio: Number,
+      brownRatio: Number,
+      healthScore: Number,
     },
 
-    // ❓ سبب التقاط الصورة
+    // ❓ سبب أو طريقة التقاط الصورة (مهم جداً للتقارير)
     captureReason: {
       type: String,
       enum: {
-        values: ["Routine", "Alert", "Scheduled", "Manual Scan", "Unknown"], // أضفنا Manual Scan هنا
+        values: [
+          "Routine",
+          "Alert",
+          "Scheduled",
+          "Manual Scan",
+          "Automatic Camera",
+          "Unknown",
+        ],
         message: "{VALUE} غير مدعوم في سبب الالتقاط",
       },
       default: "Manual Scan",
     },
 
-    // 🔗 ربط الصورة بآخر قراءة مستشعر (عشان نربط الأرقام بالصور)
+    // 🔗 ربط الصورة بآخر قراءة مستشعر (لربط الحالة البيئية بحالة النبات)
     relatedReadingId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "SensorData",
       default: null,
     },
 
-    // 🔌 الجهاز اللي التقط الصورة (لو فيه كاميرا ESP32-Cam مثلاً)
+    // 🔌 الجهاز الذي التقط الصورة (في حالة استخدام ESP32-CAM)
     deviceId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Device",
@@ -79,12 +83,13 @@ const ImageLogSchema = new mongoose.Schema(
     },
   },
   {
-    // بيعمل createdAt و updatedAt تلقائياً
+    // إضافة timestamps لتسجيل وقت الإنشاء والتعديل تلقائياً
     timestamps: true,
   },
 );
 
-// تحسين البحث للداشبورد (البحث بالمالك والقطاع مع ترتيب زمني تنازلي)
+// --- الفهارس (Indexes) لتحسين أداء البحث في الداشبورد ---
+// ترتيب زمني تنازلي للصور الخاصة بمالك معين في قطاع معين
 ImageLogSchema.index({ ownerId: 1, sectorId: 1, createdAt: -1 });
 
 module.exports = mongoose.model("ImageLog", ImageLogSchema);

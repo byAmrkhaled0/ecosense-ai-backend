@@ -48,19 +48,10 @@ const SensorDataSchema = new mongoose.Schema(
     analysis: {
       status: {
         type: String,
-        // تم تحديث القائمة لتشمل Unknown لتجنب خطأ الـ Validation
-        enum: [
-          "Healthy",
-          "Warning",
-          "Critical",
-          "Processing",
-          "Unknown",
-          "Danger",
-          "Good",
-        ],
         default: "Unknown",
+        // شيل السطر بتاع enum: ['Danger', 'Safe'...] لو موجود
       },
-      recommendation: { type: String, default: null }, // نصيحة الـ AI
+      recommendation: { type: String },
     },
   },
   {
