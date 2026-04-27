@@ -6,6 +6,36 @@ const Sector = require("../models/Sector");
 const Notification = require("../models/Notification"); // ضفنا الموديل ده
 const mongoose = require("mongoose");
 const Device = require("../models/Device");
+const User = require("../models/User");
+
+// دالة مساعدة لإرسال الـ Push Notification (ممكن تحطها بره الـ exports)
+const sendFirebasePush = async (user, title, message) => {
+  if (user && user.fcmToken) {
+    try {
+      await axios.post(
+        "https://fcm.googleapis.com/fcm/send",
+        {
+          to: user.fcmToken,
+          notification: {
+            title: title,
+            body: message,
+            sound: "default",
+            image: "https://your-app-url.com/path-to-icon.png", // اختياري: أيقونة تنبيه الزرع
+          },
+          priority: "high",
+        },
+        {
+          headers: {
+            Authorization: `key=${process.env.FIREBASE_SERVER_KEY}`,
+            "Content-Type": "application/json",
+          },
+        },
+      );
+    } catch (err) {
+      console.error("❌ Firebase Push Error:", err.message);
+    }
+  }
+};
 /* ============================================================
     1️⃣ UPLOAD & AI ANALYZE (رفع الصورة وتحليلها)
 ============================================================ */
@@ -152,13 +182,25 @@ exports.uploadImage = async (req, res) => {
     // 4️⃣ الإشعارات (تخصيص الرسالة)
     if (aiAnalysis.status !== "Healthy") {
       const io = req.app.get("io");
+
+      const title = "🚨 تنبيه صحة النبات";
+      const message =
+        captureReason === "Manual Scan"
+          ? `نتائج الفحص اليدوي: رصد (${aiAnalysis.diseaseName})`
+          : `الكاميرا الآلية رصدت إصابة (${aiAnalysis.diseaseName})`;
+
+      // 1. جلب بيانات المستخدمين عشان الـ FCM Token
+      const owner = await User.findById(finalOwnerId);
+      const worker = finalWorkerId ? await User.findById(finalWorkerId) : null;
+
+      // 2. إرسال Push Notification عبر Firebase (عشان الموبايل يرن)
+      await sendFirebasePush(owner, title, message);
+      if (worker) await sendFirebasePush(worker, title, message);
+
+      // 3. إرسال الإشعار اللحظي عبر Socket.io (لو فاتحين الأبلكيشن)
       const notificationData = {
-        title: "🚨 تنبيه صحة النبات",
-        // الرسالة تتغير حسب مين اللي صور
-        message:
-          captureReason === "Manual Scan"
-            ? `نتائج الفحص اليدوي: رصد (${aiAnalysis.diseaseName}).`
-            : `الكاميرا الآلية رصدت إصابة (${aiAnalysis.diseaseName}).`,
+        title,
+        message,
         type: "disease",
         sectorId: finalSectorId,
       };
@@ -176,6 +218,10 @@ exports.uploadImage = async (req, res) => {
         });
         io.to(finalWorkerId.toString()).emit("newNotification", nWorker);
       }
+
+      console.log(
+        `📢 Image Alert sent via Firebase & Socket for Sector: ${finalSectorId}`,
+      );
     }
 
     res.status(201).json({ success: true, data: newImageLog });

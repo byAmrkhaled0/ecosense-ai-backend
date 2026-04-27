@@ -4,6 +4,7 @@ const Sector = require("../models/Sector");
 const Notification = require("../models/Notification");
 const axios = require("axios");
 const mongoose = require("mongoose");
+const User = require("../models/User");
 
 // 1. دالة بسيطة لتنسيق نوع المحصول (لأن عمرو مستني Corn مش maize)
 /* ============================================================
@@ -127,13 +128,48 @@ exports.uploadData = async (req, res) => {
     if (isCritical) {
       const io = req.app.get("io");
 
-      // جهز بيانات الإشعار
       const socketPayload = {
         title: "🚨 تنبيه خطر فوري",
         message: `القطاع: ${sector.name} | الحالة: ${aiAnalysis.status} | حرارة: ${temp}°C`,
         sectorId: finalSectorId,
         createdAt: new Date(),
       };
+
+      // --- [ 🔥 الجزء الخاص بـ Firebase Push بدأ هنا ] ---
+
+      // 1. هنجيب بيانات المالك والعامل من الداتابيز عشان ناخد الـ fcmToken بتاعهم
+      const usersToNotify = await User.find({
+        _id: { $in: [finalOwnerId, assignedWorkerId].filter(Boolean) },
+      }).select("fcmToken");
+
+      // 2. دالة إرسال الطلب لـ Firebase
+      usersToNotify.forEach(async (user) => {
+        if (user.fcmToken) {
+          try {
+            await axios.post(
+              "https://fcm.googleapis.com/fcm/send",
+              {
+                to: user.fcmToken,
+                notification: {
+                  title: socketPayload.title,
+                  body: socketPayload.message,
+                  sound: "default",
+                },
+                priority: "high",
+              },
+              {
+                headers: {
+                  Authorization: `key=${process.env.FIREBASE_SERVER_KEY}`,
+                  "Content-Type": "application/json",
+                },
+              },
+            );
+          } catch (fcmErr) {
+            console.error("❌ Firebase Error:", fcmErr.message);
+          }
+        }
+      });
+      // --- [ 🔥 نهاية جزء Firebase ] ---
 
       // 1. ابعت الإشعار "حالا" للموبايل (Socket.io)
       if (finalOwnerId)
@@ -165,7 +201,9 @@ exports.uploadData = async (req, res) => {
       }
 
       await Notification.insertMany(notificationsToSave);
-      console.log(`📢 Alert saved and sent for sector: ${sector.name}`);
+      console.log(
+        `📢 Alert saved and sent via Socket & Firebase for sector: ${sector.name}`,
+      );
     }
 
     res.status(201).json({ success: true, data: newData });
