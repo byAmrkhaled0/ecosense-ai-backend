@@ -509,6 +509,8 @@ def build_backend_flags(risk_factors, status):
 
 def build_advanced_response(data, status, confidence, final_status=None, image_result=None):
     used_status = final_status or status
+    crop_type = str(data.get("cropType", "Unknown")).strip()
+
     risk_factors = analyze_risk_factors(data)
     diagnosis = build_diagnosis(data, used_status, risk_factors)
     actions = build_actions(risk_factors)
@@ -527,6 +529,12 @@ def build_advanced_response(data, status, confidence, final_status=None, image_r
     response = {
         "status": status,
         "final_status": used_status,
+
+        # اسم الزرعة راجع في السينسورات
+        "cropType": crop_type,
+        "cropName": crop_type,
+        "plant_name": crop_type,
+
         "confidence": confidence,
         "alert": alert_info["alert"],
         "severity": alert_info["severity"],
@@ -555,14 +563,30 @@ def build_image_only_response(image_result, crop_type="Unknown"):
     brown = float(image_result.get("brown_ratio", 0))
     score = float(image_result.get("health_score", 0.0))
 
-    crop = str(crop_type).strip().lower()
+    health_score = max(0.0, min(1.0, score))
+    severity_score = round(1.0 - health_score, 3)
+
+    if image_stress == "Healthy":
+        confidence = round(health_score, 3)
+    else:
+        confidence = severity_score
+
+    crop_type = str(crop_type).strip() or "Unknown"
+    crop = crop_type.lower()
 
     if image_stress == "Healthy":
         return {
             "status": "Healthy",
+
+            # اسم الزرعة راجع في الكاميرا
             "cropType": crop_type,
+            "cropName": crop_type,
+            "plant_name": crop_type,
+
             "disease_name": "No Disease Detected",
-            "severity_score": round(score, 3),
+            "confidence": confidence,
+            "health_score": round(health_score, 3),
+            "severity_score": severity_score,
             "recommendations": [
                 "استمر في برنامج الري والتسميد الحالي",
                 "المتابعة الدورية للنبات",
@@ -724,9 +748,16 @@ def build_image_only_response(image_result, crop_type="Unknown"):
 
     return {
         "status": status,
+
+        # اسم الزرعة راجع في الكاميرا
         "cropType": crop_type,
+        "cropName": crop_type,
+        "plant_name": crop_type,
+
         "disease_name": disease_name,
-        "severity_score": round(score, 3),
+        "confidence": confidence,
+        "health_score": round(health_score, 3),
+        "severity_score": severity_score,
         "recommendations": recommendations,
         "analysis": image_result
     }
@@ -833,7 +864,13 @@ def predict_with_image():
         if image_file is None or image_file.filename.strip() == "":
             return jsonify({"error": "No image selected"}), 400
 
-        crop_type = request.form.get("cropType", "Unknown").strip()
+        crop_type = (
+            request.form.get("cropType")
+            or request.form.get("cropName")
+            or request.form.get("plantName")
+            or request.form.get("plant_name")
+            or "Unknown"
+        ).strip()
 
         image_result = analyze_plant_image(image_file)
 
