@@ -13,4 +13,5 @@ prediction_history.json
 
 backup_unused/
 .DS_Store
-Thumbs.db
+Thumbs.db.vscode/
+plant.jpg
