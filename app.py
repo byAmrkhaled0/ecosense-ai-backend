@@ -7,6 +7,7 @@ import json
 import os
 from datetime import datetime
 
+
 app = Flask(__name__)
 CORS(app)
 
@@ -34,6 +35,12 @@ EXPECTED_FEATURES = [
     "cropType"
 ]
 
+STATUS_PRIORITY = {
+    "Healthy": 0,
+    "Moderate Stress": 1,
+    "High Stress": 2
+}
+
 # =========================
 # Load general recommendations
 # =========================
@@ -42,9 +49,9 @@ if os.path.exists(RECOMMENDATIONS_FILE):
         solutions = json.load(f)
 else:
     solutions = {
-        "Healthy": "✅ النبات بحالة جيدة.",
-        "Moderate Stress": "⚠️ يوجد إجهاد متوسط على النبات.",
-        "High Stress": "🚨 النبات في حالة حرجة."
+        "Healthy": "✅ النبات بحالة جيدة. حافظ على برنامج الري والتسميد الحالي واستمر في المتابعة الدورية.",
+        "Moderate Stress": "⚠️ يوجد إجهاد متوسط على النبات. راجع الري ودرجة الحرارة والإضاءة وقم بضبطهم لتحسين الحالة.",
+        "High Stress": "🚨 النبات في حالة حرجة! يجب التدخل فورًا بفحص رطوبة التربة والعناصر الغذائية ودرجة الحرارة وتحسين الظروف البيئية."
     }
 
 
@@ -67,7 +74,38 @@ def validate_common_fields(data):
     return missing
 
 
-def build_summary(sensor_status, image_stress, final_status):
+def normalize_sensor_data(data):
+    """Convert form/json values to the exact structure needed by the model."""
+    return {
+        "cropType": str(data["cropType"]).strip(),
+        "temperature": float(data["temperature"]),
+        "humidity": float(data["humidity"]),
+        "soilMoisture": float(data["soilMoisture"]),
+        "soilTemp": float(data["soilTemp"]),
+        "light": str(data["light"]).strip()
+    }
+
+
+def has_all_sensor_fields(data):
+    return len(validate_common_fields(data)) == 0
+
+
+def choose_worst_status(*statuses):
+    valid_statuses = [s for s in statuses if s in STATUS_PRIORITY]
+    if not valid_statuses:
+        return "Healthy"
+    return max(valid_statuses, key=lambda s: STATUS_PRIORITY[s])
+
+
+def build_summary(sensor_status, image_stress, final_status, safety_flags=None):
+    safety_flags = safety_flags or []
+
+    if safety_flags and final_status == "High Stress":
+        return "النبات في حالة حرجة بسبب قراءات خطرة أو أعراض بصرية واضحة، ويجب التدخل السريع."
+
+    if image_stress and image_stress != "Not used" and image_stress != sensor_status:
+        return f"نتيجة الحساسات تشير إلى {sensor_status}، وتحليل الصورة يشير إلى {image_stress}، لذلك تم اعتماد الحالة الأعلى خطورة."
+
     if final_status == "Healthy":
         return "النبات يبدو بحالة جيدة بناءً على التحليل المتاح."
     elif final_status == "Moderate Stress":
@@ -180,7 +218,7 @@ def save_prediction(record):
         print("⚠️ Failed to save history:", e)
 
 
-def build_recommendations(data, status):
+def build_recommendations(data, status, image_result=None, safety_flags=None):
     recs = []
 
     temperature = float(data["temperature"])
@@ -189,6 +227,7 @@ def build_recommendations(data, status):
     soil_temp = float(data["soilTemp"])
     light = str(data["light"]).strip()
     crop_type = str(data["cropType"]).strip()
+    safety_flags = safety_flags or []
 
     if status == "Healthy":
         recs.append(f"✅ النبات ({crop_type}) بحالة جيدة ومستقرة.")
@@ -196,6 +235,9 @@ def build_recommendations(data, status):
         recs.append(f"⚠️ النبات ({crop_type}) يعاني من إجهاد متوسط ويحتاج متابعة.")
     else:
         recs.append(f"🚨 النبات ({crop_type}) في حالة حرجة ويحتاج تدخلًا فوريًا.")
+
+    if "EXTREME_CONDITION_OVERRIDE" in safety_flags:
+        recs.append("🚨 تم رفع الحالة تلقائيًا بسبب وجود قراءات خطرة جدًا حتى لو توقع الموديل غير ذلك.")
 
     if temperature < 20:
         recs.append("🌡️ درجة الحرارة منخفضة؛ يُفضل رفع الحرارة أو تقليل التعرض للبرودة.")
@@ -234,6 +276,11 @@ def build_recommendations(data, status):
     else:
         recs.append("☀️ قيمة الإضاءة غير معروفة؛ تأكد من إرسال قيمة صحيحة.")
 
+    if image_result:
+        for item in image_result.get("image_recommendations", []):
+            if item not in recs:
+                recs.append("📸 " + item)
+
     return recs
 
 
@@ -246,11 +293,27 @@ def analyze_risk_factors(data):
 
     risks = []
 
-    if soil_moisture < 30:
+    if soil_moisture <= 10:
+        risks.append({
+            "code": "CRITICAL_LOW_SOIL_MOISTURE",
+            "label": "انخفاض حاد جدًا في رطوبة التربة",
+            "severity": "critical",
+            "value": soil_moisture,
+            "ideal_range": "30-70"
+        })
+    elif soil_moisture < 30:
         risks.append({
             "code": "LOW_SOIL_MOISTURE",
             "label": "انخفاض رطوبة التربة",
             "severity": "high",
+            "value": soil_moisture,
+            "ideal_range": "30-70"
+        })
+    elif soil_moisture >= 90:
+        risks.append({
+            "code": "CRITICAL_HIGH_SOIL_MOISTURE",
+            "label": "ارتفاع حاد جدًا في رطوبة التربة",
+            "severity": "critical",
             "value": soil_moisture,
             "ideal_range": "30-70"
         })
@@ -263,7 +326,15 @@ def analyze_risk_factors(data):
             "ideal_range": "30-70"
         })
 
-    if temperature < 20:
+    if temperature >= 45:
+        risks.append({
+            "code": "CRITICAL_HIGH_TEMPERATURE",
+            "label": "ارتفاع حاد جدًا في درجة الحرارة",
+            "severity": "critical",
+            "value": temperature,
+            "ideal_range": "20-35"
+        })
+    elif temperature < 20:
         risks.append({
             "code": "LOW_TEMPERATURE",
             "label": "انخفاض درجة الحرارة",
@@ -280,11 +351,27 @@ def analyze_risk_factors(data):
             "ideal_range": "20-35"
         })
 
-    if humidity < 40:
+    if humidity <= 15:
+        risks.append({
+            "code": "CRITICAL_LOW_HUMIDITY",
+            "label": "انخفاض حاد جدًا في الرطوبة الجوية",
+            "severity": "high",
+            "value": humidity,
+            "ideal_range": "40-80"
+        })
+    elif humidity < 40:
         risks.append({
             "code": "LOW_HUMIDITY",
             "label": "انخفاض الرطوبة الجوية",
             "severity": "medium",
+            "value": humidity,
+            "ideal_range": "40-80"
+        })
+    elif humidity >= 90:
+        risks.append({
+            "code": "CRITICAL_HIGH_HUMIDITY",
+            "label": "ارتفاع حاد جدًا في الرطوبة الجوية",
+            "severity": "high",
             "value": humidity,
             "ideal_range": "40-80"
         })
@@ -297,7 +384,15 @@ def analyze_risk_factors(data):
             "ideal_range": "40-80"
         })
 
-    if soil_temp < 18:
+    if soil_temp >= 40:
+        risks.append({
+            "code": "CRITICAL_HIGH_SOIL_TEMP",
+            "label": "ارتفاع حاد جدًا في حرارة التربة",
+            "severity": "critical",
+            "value": soil_temp,
+            "ideal_range": "18-30"
+        })
+    elif soil_temp < 18:
         risks.append({
             "code": "LOW_SOIL_TEMP",
             "label": "انخفاض حرارة التربة",
@@ -334,65 +429,197 @@ def analyze_risk_factors(data):
     return risks
 
 
-def build_diagnosis(data, status, risk_factors):
-    if not risk_factors and status == "Healthy":
-        return {
-            "primary_issue": "لا توجد مشكلة رئيسية",
-            "secondary_issue": "الظروف الحالية مستقرة",
-            "explanation": "كل القراءات تقريبًا داخل الحدود المناسبة."
-        }
+def apply_safety_layer(sensor_status, risk_factors, image_result=None):
+    """
+    Safety override prevents impossible outputs like:
+    temperature=55 + soilMoisture=5 but final_status=Healthy.
+    """
+    safety_flags = []
+    final_status = sensor_status
 
     codes = [r["code"] for r in risk_factors]
+    severities = [r["severity"] for r in risk_factors]
+    critical_count = severities.count("critical")
+    high_or_critical_count = sum(1 for s in severities if s in ("high", "critical"))
 
-    if "LOW_SOIL_MOISTURE" in codes and "HIGH_TEMPERATURE" in codes:
+    extreme_codes = {
+        "CRITICAL_LOW_SOIL_MOISTURE",
+        "CRITICAL_HIGH_SOIL_MOISTURE",
+        "CRITICAL_HIGH_TEMPERATURE",
+        "CRITICAL_HIGH_SOIL_TEMP",
+    }
+
+    if any(code in codes for code in extreme_codes):
+        final_status = "High Stress"
+        safety_flags.append("EXTREME_CONDITION_OVERRIDE")
+
+    if critical_count >= 2 or high_or_critical_count >= 3:
+        final_status = "High Stress"
+        safety_flags.append("MULTIPLE_RISK_FACTORS_OVERRIDE")
+
+    if high_or_critical_count >= 1 and sensor_status == "Healthy":
+        final_status = choose_worst_status(final_status, "Moderate Stress")
+        safety_flags.append("HEALTHY_MODEL_CORRECTED_TO_MODERATE")
+
+    if image_result:
+        image_stress = image_result.get("image_stress")
+        visual_problem = image_result.get("visual_problem")
+        dark_spot_ratio = float(image_result.get("dark_spot_ratio", 0))
+        damaged_ratio = float(image_result.get("damaged_ratio", 0))
+
+        if image_stress in STATUS_PRIORITY:
+            final_status = choose_worst_status(final_status, image_stress)
+
+        if visual_problem == "Leaf Spot / Fungal Suspicion" and dark_spot_ratio >= 0.08:
+            final_status = choose_worst_status(final_status, "High Stress")
+            safety_flags.append("IMAGE_DISEASE_OVERRIDE")
+
+        if damaged_ratio >= 0.38:
+            final_status = choose_worst_status(final_status, "High Stress")
+            safety_flags.append("HIGH_VISUAL_DAMAGE_OVERRIDE")
+
+    return final_status, sorted(list(set(safety_flags)))
+
+
+def build_diagnosis(data, status, risk_factors, image_result=None, safety_flags=None):
+    safety_flags = safety_flags or []
+    codes = [r["code"] for r in risk_factors]
+
+    if image_result:
+        visual_problem = image_result.get("visual_problem")
+        visual_problem_ar = image_result.get("visual_problem_ar", "")
+        visual_explanation = image_result.get("visual_explanation", "")
+
+        if visual_problem == "Leaf Spot / Fungal Suspicion":
+            return {
+                "primary_issue": "اشتباه تبقع أوراق أو إصابة فطرية",
+                "secondary_issue": "ظهور بقع داكنة مع اصفرار في الورقة",
+                "explanation": visual_explanation,
+                "visual_problem": visual_problem,
+                "visual_problem_ar": visual_problem_ar,
+                "safety_flags": safety_flags
+            }
+
+        if visual_problem == "Chlorosis / Nutrient Deficiency Suspicion":
+            return {
+                "primary_issue": "اشتباه اصفرار ناتج عن نقص عناصر أو ضعف امتصاص",
+                "secondary_issue": "يلزم ربط الصورة ببيانات التربة والتسميد",
+                "explanation": visual_explanation,
+                "visual_problem": visual_problem,
+                "visual_problem_ar": visual_problem_ar,
+                "safety_flags": safety_flags
+            }
+
+        if visual_problem == "Necrosis / Severe Leaf Damage":
+            return {
+                "primary_issue": "تلف واضح في نسيج الورقة",
+                "secondary_issue": "قد يكون مرتبطًا بإجهاد شديد أو مرض ورقي",
+                "explanation": visual_explanation,
+                "visual_problem": visual_problem,
+                "visual_problem_ar": visual_problem_ar,
+                "safety_flags": safety_flags
+            }
+
+    if "CRITICAL_LOW_SOIL_MOISTURE" in codes and "CRITICAL_HIGH_TEMPERATURE" in codes:
+        return {
+            "primary_issue": "إجهاد مائي وحراري حاد",
+            "secondary_issue": "خطر ذبول أو تلف سريع إذا لم يتم التدخل",
+            "explanation": "رطوبة التربة منخفضة جدًا مع درجة حرارة مرتفعة جدًا، لذلك تم رفع الحالة إلى High Stress.",
+            "safety_flags": safety_flags
+        }
+
+    if ("LOW_SOIL_MOISTURE" in codes or "CRITICAL_LOW_SOIL_MOISTURE" in codes) and (
+        "HIGH_TEMPERATURE" in codes or "CRITICAL_HIGH_TEMPERATURE" in codes
+    ):
         return {
             "primary_issue": "إجهاد مائي وحراري",
             "secondary_issue": "احتمال ضعف في كفاءة التبريد أو الري",
-            "explanation": "تم رصد انخفاض في رطوبة التربة مع ارتفاع في درجة الحرارة."
+            "explanation": "تم رصد انخفاض في رطوبة التربة مع ارتفاع في درجة الحرارة.",
+            "safety_flags": safety_flags
         }
 
-    if "HIGH_SOIL_MOISTURE" in codes:
+    if "HIGH_SOIL_MOISTURE" in codes or "CRITICAL_HIGH_SOIL_MOISTURE" in codes:
         return {
             "primary_issue": "زيادة مياه حول الجذور",
             "secondary_issue": "احتمال ضعف صرف أو زيادة ري",
-            "explanation": "رطوبة التربة أعلى من النطاق المناسب."
+            "explanation": "رطوبة التربة أعلى من النطاق المناسب وقد تؤثر على الجذور.",
+            "safety_flags": safety_flags
         }
 
     if "LOW_LIGHT" in codes:
         return {
             "primary_issue": "ضعف الإضاءة",
             "secondary_issue": "تباطؤ محتمل في النمو",
-            "explanation": "الإضاءة الحالية أقل من المستوى المناسب للنمو."
+            "explanation": "الإضاءة الحالية أقل من المستوى المناسب للنمو.",
+            "safety_flags": safety_flags
+        }
+
+    if not risk_factors and status == "Healthy":
+        return {
+            "primary_issue": "لا توجد مشكلة رئيسية",
+            "secondary_issue": "الظروف الحالية مستقرة",
+            "explanation": "كل القراءات تقريبًا داخل الحدود المناسبة.",
+            "safety_flags": safety_flags
         }
 
     if status == "Moderate Stress":
         return {
             "primary_issue": "إجهاد متوسط",
             "secondary_issue": "خلل بيئي يحتاج تصحيح",
-            "explanation": "تم رصد عامل أو أكثر خارج النطاق المثالي."
+            "explanation": "تم رصد عامل أو أكثر خارج النطاق المثالي.",
+            "safety_flags": safety_flags
         }
 
     if status == "High Stress":
         return {
             "primary_issue": "إجهاد شديد",
             "secondary_issue": "عدة عوامل قد تؤثر على النبات",
-            "explanation": "هناك أكثر من قراءة غير مناسبة وتحتاج تدخلًا سريعًا."
+            "explanation": "هناك أكثر من قراءة غير مناسبة أو أعراض بصرية تحتاج تدخلًا سريعًا.",
+            "safety_flags": safety_flags
         }
 
     return {
         "primary_issue": "حالة مستقرة نسبيًا",
         "secondary_issue": "مطلوب استمرار المتابعة",
-        "explanation": "لا توجد مؤشرات خطورة شديدة حاليًا."
+        "explanation": "لا توجد مؤشرات خطورة شديدة حاليًا.",
+        "safety_flags": safety_flags
     }
 
 
-def build_actions(risk_factors):
+def build_actions(risk_factors, image_result=None):
     actions = []
+
+    if image_result:
+        visual_problem = image_result.get("visual_problem")
+
+        if visual_problem == "Leaf Spot / Fungal Suspicion":
+            actions.append({
+                "priority": 1,
+                "code": "LEAF_SPOT_CONTROL",
+                "title": "عزل وإزالة الأوراق المصابة وتحسين التهوية",
+                "details": "تحليل الصورة رصد بقع داكنة مع اصفرار، وهذا يستدعي تقليل انتشار الإصابة."
+            })
+
+        elif visual_problem == "Chlorosis / Nutrient Deficiency Suspicion":
+            actions.append({
+                "priority": 2,
+                "code": "NUTRIENT_CHECK",
+                "title": "مراجعة برنامج التسميد و pH",
+                "details": "الاصفرار قد يرتبط بنقص عناصر أو ضعف امتصاص."
+            })
+
+        elif visual_problem == "Necrosis / Severe Leaf Damage":
+            actions.append({
+                "priority": 1,
+                "code": "REMOVE_DAMAGED_TISSUE",
+                "title": "إزالة الأجزاء شديدة التلف",
+                "details": "وجود مناطق ميتة أو داكنة بنسبة مرتفعة يحتاج متابعة سريعة."
+            })
 
     for risk in risk_factors:
         code = risk["code"]
 
-        if code == "LOW_SOIL_MOISTURE":
+        if code in ("LOW_SOIL_MOISTURE", "CRITICAL_LOW_SOIL_MOISTURE"):
             actions.append({
                 "priority": 1,
                 "code": "IRRIGATION_UP",
@@ -400,7 +627,7 @@ def build_actions(risk_factors):
                 "details": "رطوبة التربة أقل من النطاق المناسب."
             })
 
-        elif code == "HIGH_SOIL_MOISTURE":
+        elif code in ("HIGH_SOIL_MOISTURE", "CRITICAL_HIGH_SOIL_MOISTURE"):
             actions.append({
                 "priority": 1,
                 "code": "IRRIGATION_DOWN",
@@ -408,7 +635,7 @@ def build_actions(risk_factors):
                 "details": "رطوبة التربة مرتفعة وقد تسبب مشاكل للجذور."
             })
 
-        elif code == "HIGH_TEMPERATURE":
+        elif code in ("HIGH_TEMPERATURE", "CRITICAL_HIGH_TEMPERATURE"):
             actions.append({
                 "priority": 2,
                 "code": "COOLING_ON",
@@ -424,7 +651,7 @@ def build_actions(risk_factors):
                 "details": "درجة الحرارة أقل من النطاق المناسب."
             })
 
-        elif code == "HIGH_HUMIDITY":
+        elif code in ("HIGH_HUMIDITY", "CRITICAL_HIGH_HUMIDITY"):
             actions.append({
                 "priority": 2,
                 "code": "AIRFLOW_UP",
@@ -432,7 +659,7 @@ def build_actions(risk_factors):
                 "details": "الرطوبة العالية قد تزيد خطر الأمراض."
             })
 
-        elif code == "LOW_HUMIDITY":
+        elif code in ("LOW_HUMIDITY", "CRITICAL_LOW_HUMIDITY"):
             actions.append({
                 "priority": 3,
                 "code": "HUMIDITY_UP",
@@ -448,7 +675,7 @@ def build_actions(risk_factors):
                 "details": "الإضاءة الحالية غير كافية للنمو."
             })
 
-        elif code == "HIGH_SOIL_TEMP":
+        elif code in ("HIGH_SOIL_TEMP", "CRITICAL_HIGH_SOIL_TEMP"):
             actions.append({
                 "priority": 2,
                 "code": "ROOTZONE_COOL",
@@ -464,21 +691,41 @@ def build_actions(risk_factors):
                 "details": "حرارة التربة منخفضة."
             })
 
-    actions = sorted(actions, key=lambda x: x["priority"])
+    # Remove duplicate action codes
+    unique = {}
+    for action in actions:
+        unique[action["code"]] = action
+
+    actions = sorted(unique.values(), key=lambda x: x["priority"])
     return actions
 
 
-def build_monitoring(risk_factors, status):
+def build_monitoring(risk_factors, status, image_result=None):
     monitoring = []
     codes = [r["code"] for r in risk_factors]
 
-    if "LOW_SOIL_MOISTURE" in codes or "HIGH_SOIL_MOISTURE" in codes:
+    if image_result and image_result.get("image_stress") != "Healthy":
+        monitoring.append("التقط صورة جديدة لنفس الورقة أو النبات بعد 24-48 ساعة للمقارنة.")
+
+    if image_result and image_result.get("visual_problem") == "Leaf Spot / Fungal Suspicion":
+        monitoring.append("راقب هل البقع الداكنة تزيد أو تنتقل لأوراق جديدة.")
+
+    if any(code in codes for code in [
+        "LOW_SOIL_MOISTURE",
+        "HIGH_SOIL_MOISTURE",
+        "CRITICAL_LOW_SOIL_MOISTURE",
+        "CRITICAL_HIGH_SOIL_MOISTURE"
+    ]):
         monitoring.append("إعادة فحص رطوبة التربة بعد التعديل في الري.")
 
-    if "HIGH_TEMPERATURE" in codes or "LOW_TEMPERATURE" in codes:
+    if any(code in codes for code in [
+        "HIGH_TEMPERATURE",
+        "LOW_TEMPERATURE",
+        "CRITICAL_HIGH_TEMPERATURE"
+    ]):
         monitoring.append("مراقبة درجة الحرارة خلال الساعات القادمة.")
 
-    if "HIGH_HUMIDITY" in codes:
+    if any(code in codes for code in ["HIGH_HUMIDITY", "CRITICAL_HIGH_HUMIDITY"]):
         monitoring.append("متابعة ظهور أي أعراض مرضية أو فطرية.")
 
     if "LOW_LIGHT" in codes:
@@ -493,44 +740,67 @@ def build_monitoring(risk_factors, status):
     return monitoring
 
 
-def build_backend_flags(risk_factors, status):
+def build_backend_flags(risk_factors, status, image_result=None, safety_flags=None):
     codes = [r["code"] for r in risk_factors]
+    safety_flags = safety_flags or []
 
     return {
-        "needs_irrigation": "LOW_SOIL_MOISTURE" in codes,
-        "needs_drainage_check": "HIGH_SOIL_MOISTURE" in codes,
-        "needs_cooling": "HIGH_TEMPERATURE" in codes,
+        "needs_irrigation": ("LOW_SOIL_MOISTURE" in codes or "CRITICAL_LOW_SOIL_MOISTURE" in codes),
+        "needs_drainage_check": ("HIGH_SOIL_MOISTURE" in codes or "CRITICAL_HIGH_SOIL_MOISTURE" in codes),
+        "needs_cooling": ("HIGH_TEMPERATURE" in codes or "CRITICAL_HIGH_TEMPERATURE" in codes),
         "needs_heating": "LOW_TEMPERATURE" in codes,
         "needs_light_adjustment": ("LOW_LIGHT" in codes or "MEDIUM_LIGHT" in codes),
-        "needs_humidity_adjustment": ("LOW_HUMIDITY" in codes or "HIGH_HUMIDITY" in codes),
-        "needs_urgent_attention": status == "High Stress"
+        "needs_humidity_adjustment": any(code in codes for code in [
+            "LOW_HUMIDITY",
+            "HIGH_HUMIDITY",
+            "CRITICAL_LOW_HUMIDITY",
+            "CRITICAL_HIGH_HUMIDITY"
+        ]),
+        "needs_leaf_disease_check": bool(
+            image_result and image_result.get("visual_problem") == "Leaf Spot / Fungal Suspicion"
+        ),
+        "needs_nutrient_check": bool(
+            image_result and image_result.get("visual_problem") == "Chlorosis / Nutrient Deficiency Suspicion"
+        ),
+        "needs_urgent_attention": status == "High Stress",
+        "safety_override_applied": len(safety_flags) > 0,
+        "safety_flags": safety_flags
     }
 
 
-def build_advanced_response(data, status, confidence, final_status=None, image_result=None):
-    used_status = final_status or status
+def build_advanced_response(data, status, confidence, image_result=None):
     crop_type = str(data.get("cropType", "Unknown")).strip()
 
     risk_factors = analyze_risk_factors(data)
-    diagnosis = build_diagnosis(data, used_status, risk_factors)
-    actions = build_actions(risk_factors)
-    monitoring = build_monitoring(risk_factors, used_status)
-    backend_flags = build_backend_flags(risk_factors, used_status)
-    recommendations = build_recommendations(data, used_status)
-    alert_info = get_alert_info(used_status)
-    notification = build_notification_payload(used_status, diagnosis, actions)
+    image_status = image_result.get("image_stress") if image_result else "Not used"
 
-    summary = build_summary(
-        status,
-        image_result.get("image_stress") if image_result else "Not used",
-        used_status
+    initial_final_status = choose_worst_status(status, image_status)
+    final_status, safety_flags = apply_safety_layer(
+        sensor_status=initial_final_status,
+        risk_factors=risk_factors,
+        image_result=image_result
     )
 
-    response = {
-        "status": status,
-        "final_status": used_status,
+    diagnosis = build_diagnosis(data, final_status, risk_factors, image_result, safety_flags)
+    actions = build_actions(risk_factors, image_result)
+    monitoring = build_monitoring(risk_factors, final_status, image_result)
+    backend_flags = build_backend_flags(risk_factors, final_status, image_result, safety_flags)
+    recommendations = build_recommendations(data, final_status, image_result, safety_flags)
+    alert_info = get_alert_info(final_status)
+    notification = build_notification_payload(final_status, diagnosis, actions)
 
-        # اسم الزرعة راجع في السينسورات
+    summary = build_summary(
+        sensor_status=status,
+        image_stress=image_status,
+        final_status=final_status,
+        safety_flags=safety_flags
+    )
+
+    response = {"status": final_status,
+        "sensor_status": status,
+        "image_status": image_status,
+        "final_status": final_status,
+        # اسم الزرعة راجع في السينسورات والكاميرا
         "cropType": crop_type,
         "cropName": crop_type,
         "plant_name": crop_type,
@@ -539,215 +809,53 @@ def build_advanced_response(data, status, confidence, final_status=None, image_r
         "alert": alert_info["alert"],
         "severity": alert_info["severity"],
         "summary": summary,
-        "general_recommendation": solutions.get(used_status, ""),
+        "general_recommendation": solutions.get(final_status, ""),
         "diagnosis": diagnosis,
         "risk_factors": risk_factors,
         "recommendations": recommendations,
         "actions": actions,
         "monitoring": monitoring,
         "backend_flags": backend_flags,
+       "safety_layer": {
+        "applied": len(safety_flags) > 0,
+        "flags": safety_flags,
+        "sensor_model_status": status,
+        "image_status": image_status,
+        "combined_status_before_safety": initial_final_status,
+        "status_after_safety": final_status
+    },
         "notification": notification,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
     if image_result is not None:
         response["image_analysis"] = image_result
-        response["sensor_status"] = status
 
     return response
 
 
 def build_image_only_response(image_result, crop_type="Unknown"):
     image_stress = image_result.get("image_stress", "Healthy")
-    yellow = float(image_result.get("yellow_ratio", 0))
-    brown = float(image_result.get("brown_ratio", 0))
-    score = float(image_result.get("health_score", 0.0))
-
-    health_score = max(0.0, min(1.0, score))
-    severity_score = round(1.0 - health_score, 3)
+    health_score = float(image_result.get("health_score", 0.0))
+    severity_score = float(image_result.get("severity_score", round(1.0 - health_score, 3)))
+    visual_problem = image_result.get("visual_problem", "General Visual Stress")
+    visual_problem_ar = image_result.get("visual_problem_ar", "إجهاد بصري عام")
 
     if image_stress == "Healthy":
-        confidence = round(health_score, 3)
+        status = "Healthy"
+        disease_name = "No Clear Disease Detected"
+        confidence = round(max(health_score, 0.50), 3)
     else:
-        confidence = severity_score
-
-    crop_type = str(crop_type).strip() or "Unknown"
-    crop = crop_type.lower()
-
-    if image_stress == "Healthy":
-        return {
-            "status": "Healthy",
-
-            # اسم الزرعة راجع في الكاميرا
-            "cropType": crop_type,
-            "cropName": crop_type,
-            "plant_name": crop_type,
-
-            "disease_name": "No Disease Detected",
-            "confidence": confidence,
-            "health_score": round(health_score, 3),
-            "severity_score": severity_score,
-            "recommendations": [
-                "استمر في برنامج الري والتسميد الحالي",
-                "المتابعة الدورية للنبات",
-                "مراقبة أي تغير جديد في لون الأوراق"
-            ],
-            "analysis": image_result
-        }
-
-    disease_name = "General Plant Stress"
-    recommendations = [
-        "مراجعة الري",
-        "تحسين التهوية",
-        "فحص النبات خلال 2-3 أيام"
-    ]
-    status = "Detected"
-
-    # Tomato
-    if crop == "tomato":
-        if yellow > 0.25 and brown < 0.05:
-            disease_name = "Nutrient Deficiency (Nitrogen or Iron) - Tomato"
-            recommendations = [
-                "إضافة سماد نيتروجيني أو عناصر صغرى مثل الحديد",
-                "مراجعة pH التربة أو المحلول المغذي",
-                "تحسين برنامج التسميد",
-                "متابعة الأوراق الحديثة والقديمة"
-            ]
-            status = "Detected"
-
-        elif brown > 0.08 and yellow > 0.10:
-            disease_name = "Early Blight / Leaf Spot (Tomato)"
-            recommendations = [
-                "إزالة الأوراق المصابة فورًا",
-                "رش مبيد فطري مناسب مثل مانكوزيب أو كلوروثالونيل حسب التوصية المحلية",
-                "تقليل الرطوبة وتحسين التهوية",
-                "تجنب الري على الأوراق",
-                "مراقبة انتشار البقع خلال 3 أيام"
-            ]
-            status = "Infected"
-
-        elif brown > 0.10:
-            disease_name = "Tomato Fungal Leaf Infection"
-            recommendations = [
-                "إزالة الأوراق الأكثر إصابة",
-                "استخدام مبيد فطري مناسب",
-                "تحسين التهوية وتقليل الرطوبة",
-                "فحص باقي النباتات المجاورة"
-            ]
-            status = "Infected"
-
-        else:
-            disease_name = "General Tomato Stress"
-            recommendations = [
-                "مراجعة الري والتسميد",
-                "تحسين التهوية",
-                "فحص النبات خلال يومين",
-                "مراقبة أي زيادة في الاصفرار أو البقع"
-            ]
-            status = "Detected"
-
-    # Cucumber
-    elif crop == "cucumber":
-        if yellow > 0.22 and brown < 0.05:
-            disease_name = "Nutrient Deficiency or Downy Mildew Suspicion (Cucumber)"
-            recommendations = [
-                "فحص السطح السفلي للأوراق",
-                "تحسين التهوية وتقليل الرطوبة",
-                "مراجعة التسميد خاصة النيتروجين والمغنيسيوم",
-                "استخدام معاملة فطرية مناسبة إذا زادت الأعراض"
-            ]
-            status = "Detected"
-
-        elif brown > 0.08:
-            disease_name = "Leaf Spot / Fungal Stress (Cucumber)"
-            recommendations = [
-                "إزالة الأوراق المصابة",
-                "تقليل الرطوبة حول النبات",
-                "تحسين حركة الهواء",
-                "رش مبيد فطري مناسب حسب التوصية المحلية"
-            ]
-            status = "Infected"
-
-        else:
-            disease_name = "General Cucumber Stress"
-            recommendations = [
-                "مراجعة الري",
-                "تحسين التهوية",
-                "فحص الأوراق يوميًا",
-                "مراجعة التسميد"
-            ]
-            status = "Detected"
-
-    # Pepper
-    elif crop == "pepper":
-        if yellow > 0.20 and brown < 0.05:
-            disease_name = "Nutrient Deficiency (Pepper)"
-            recommendations = [
-                "مراجعة التسميد خاصة النيتروجين والحديد والمغنيسيوم",
-                "فحص pH",
-                "متابعة تطور الاصفرار في الأوراق الحديثة"
-            ]
-            status = "Detected"
-
-        elif brown > 0.08:
-            disease_name = "Bacterial/Fungal Leaf Spot Suspicion (Pepper)"
-            recommendations = [
-                "إزالة الأوراق المصابة",
-                "تقليل البلل على الأوراق",
-                "تحسين التهوية",
-                "استخدام معاملة مناسبة حسب التشخيص الحقلي"
-            ]
-            status = "Infected"
-
-        else:
-            disease_name = "General Pepper Stress"
-            recommendations = [
-                "مراجعة الري والتسميد",
-                "تحسين الظروف البيئية",
-                "مراقبة تطور الأعراض"
-            ]
-            status = "Detected"
-
-    # Default
-    else:
-        if yellow > 0.25 and brown < 0.05:
-            disease_name = "Nutrient Deficiency"
-            recommendations = [
-                "مراجعة برنامج التسميد",
-                "فحص العناصر الصغرى",
-                "مراجعة pH"
-            ]
-            status = "Detected"
-
-        elif brown > 0.08:
-            disease_name = "Fungal Infection / Leaf Spot"
-            recommendations = [
-                "إزالة الأجزاء المصابة",
-                "تحسين التهوية",
-                "استخدام مبيد فطري مناسب حسب التوصية المحلية"
-            ]
-            status = "Infected"
-
-        elif yellow > 0.15 and brown > 0.05:
-            disease_name = "Combined Stress (Disease + Nutrient Issue)"
-            recommendations = [
-                "إزالة الأجزاء المصابة",
-                "تحسين التسميد",
-                "مراجعة الري والتهوية"
-            ]
-            status = "Detected"
-
-        else:
-            disease_name = "General Plant Stress"
-            recommendations = [
-                "مراجعة الري",
-                "تحسين التهوية",
-                "فحص النبات خلال 2-3 أيام"
-            ]
-            status = "Detected"
+        status = "Infected" if visual_problem in [
+            "Leaf Spot / Fungal Suspicion",
+            "Necrosis / Severe Leaf Damage"
+        ] else "Detected"
+        disease_name = visual_problem
+        confidence = round(max(severity_score, 0.50), 3)
 
     return {
         "status": status,
+        "final_status": image_stress,
 
         # اسم الزرعة راجع في الكاميرا
         "cropType": crop_type,
@@ -755,11 +863,14 @@ def build_image_only_response(image_result, crop_type="Unknown"):
         "plant_name": crop_type,
 
         "disease_name": disease_name,
+        "disease_name_ar": visual_problem_ar,
         "confidence": confidence,
         "health_score": round(health_score, 3),
-        "severity_score": severity_score,
-        "recommendations": recommendations,
-        "analysis": image_result
+        "severity_score": round(severity_score, 3),
+        "summary": image_result.get("visual_explanation", ""),
+        "recommendations": image_result.get("image_recommendations", []),
+        "analysis": image_result,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
 
 
@@ -769,7 +880,24 @@ def build_image_only_response(image_result, crop_type="Unknown"):
 @app.route("/", methods=["GET"])
 def home():
     return jsonify({
-        "message": "Smart Plant Health API is running ✅"
+        "message": "Smart Plant Health API V2 is running ✅",
+        "version": "2.0",
+        "features": [
+            "sensor prediction",
+            "image analysis",
+            "sensor + image fusion",
+            "safety override layer",
+            "visual disease suspicion"
+        ]
+    }), 200
+
+
+@app.route("/api/health", methods=["GET"])
+def api_health():
+    return jsonify({
+        "status": "ok",
+        "message": "API is healthy",
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }), 200
 
 
@@ -789,6 +917,7 @@ def simple_predict():
                 "missing": missing
             }), 400
 
+        data = normalize_sensor_data(data)
         status, confidence = predict_sensor_status(data)
 
         response_data = build_advanced_response(
@@ -828,6 +957,7 @@ def mobile_predict():
                 "missing": missing
             }), 400
 
+        data = normalize_sensor_data(data)
         status, confidence = predict_sensor_status(data)
 
         response_data = build_advanced_response(
@@ -853,6 +983,24 @@ def mobile_predict():
 
 @app.route("/api/predict_with_image", methods=["POST"])
 def predict_with_image():
+    """
+    V2 supports two modes:
+
+    1) Image only:
+       form-data:
+       - file
+       - cropType optional
+
+    2) Image + sensors:
+       form-data:
+       - file
+       - cropType
+       - temperature
+       - humidity
+       - soilMoisture
+       - soilTemp
+       - light
+    """
     try:
         if "file" not in request.files:
             return jsonify({
@@ -864,11 +1012,13 @@ def predict_with_image():
         if image_file is None or image_file.filename.strip() == "":
             return jsonify({"error": "No image selected"}), 400
 
+        form_data = request.form.to_dict()
+
         crop_type = (
-            request.form.get("cropType")
-            or request.form.get("cropName")
-            or request.form.get("plantName")
-            or request.form.get("plant_name")
+            form_data.get("cropType")
+            or form_data.get("cropName")
+            or form_data.get("plantName")
+            or form_data.get("plant_name")
             or "Unknown"
         ).strip()
 
@@ -877,21 +1027,58 @@ def predict_with_image():
         if "error" in image_result:
             return jsonify({"error": image_result["error"]}), 400
 
-        response_data = build_image_only_response(image_result, crop_type)
+        # If all sensor fields exist, fuse image + sensors
+        if has_all_sensor_fields(form_data):
+            data = {
+                "cropType": crop_type,
+                "temperature": form_data.get("temperature"),
+                "humidity": form_data.get("humidity"),
+                "soilMoisture": form_data.get("soilMoisture"),
+                "soilTemp": form_data.get("soilTemp"),
+                "light": form_data.get("light")
+            }
+
+            data = normalize_sensor_data(data)
+            status, confidence = predict_sensor_status(data)
+
+            response_data = build_advanced_response(
+                data=data,
+                status=status,
+                confidence=confidence,
+                image_result=image_result
+            )
+
+            request_type = "predict_with_image_and_sensors"
+            saved_input = data
+
+        else:
+            response_data = build_image_only_response(image_result, crop_type)
+            request_type = "predict_with_image"
+            saved_input = {
+                "cropType": crop_type,
+                "mode": "image_only"
+            }
 
         save_prediction({
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "request_type": "predict_with_image",
+            "request_type": request_type,
             "image_filename": image_file.filename,
-            "crop_type": crop_type,
+            "input": saved_input,
             "image_analysis": image_result,
             "result": response_data
         })
 
         return jsonify(response_data), 200
 
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/image_predict", methods=["POST"])
+def image_predict_alias():
+    return predict_with_image()
 
 
 @app.route("/api/history", methods=["GET"])
@@ -909,6 +1096,6 @@ def get_history():
 
 
 if __name__ == "__main__":
-    print("🚀 Starting server...")
+    print("🚀 Starting Smart Plant Health API V2...")
     port = int(os.environ.get("PORT", 5000))
     app.run(debug=False, host="0.0.0.0", port=port)
