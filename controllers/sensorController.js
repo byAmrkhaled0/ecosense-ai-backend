@@ -32,27 +32,22 @@ const formatLightValue = (light) => {
   return lightMap[normalized] || "Medium";
 };
 
-/* ============================================================
-   1️⃣ UPLOAD SENSOR DATA (استقبال البيانات وتحليلها)
-   ============================================================ */
 exports.uploadData = async (req, res) => {
   try {
-    // 1. استخراج البيانات مع التحويل لأرقام لضمان عدم حدوث Validation Error
-    // استخدمنا parseFloat عشان لو القيمة جاية String من الـ ESP تتحول لرقم صح
     const { deviceSerial } = req.body;
     const temp = parseFloat(req.body.temp) || 0;
     const hum = parseFloat(req.body.hum) || 0;
     const Soil = parseFloat(req.body.Soil) || 0;
     const light = req.body.light || "Unknown";
 
-    // التأكد من وجود السيريال نمبر
+    // ✅ Validation سريع
     if (!deviceSerial) {
       return res
         .status(400)
         .json({ success: false, message: "deviceSerial مطلوب" });
     }
 
-    // 2. البحث عن الجهاز وعمل Populate للقطاع
+    // ✅ نجيب الجهاز بسرعة
     const device = await Device.findOne({ deviceSerial }).populate("sectorId");
 
     if (!device || !device.sectorId) {
@@ -62,146 +57,69 @@ exports.uploadData = async (req, res) => {
       });
     }
 
-    const sector = device.sectorId;
-    const finalOwnerId = device.ownerId || sector.ownerId;
-    const finalSectorId = sector._id;
-    const assignedWorkerId = sector.assignedWorker;
+    // 🟢 رجّع response فورًا (أهم خطوة)
+    res.status(200).json({ success: true });
 
-    // 3. محاولة الاتصال بسيرفر الـ AI (مع معالجة الأخطاء)
-    let aiAnalysis = {
-      status: "Unknown",
-      recommendation: "سيرفر الـ AI غير متصل",
-    };
+    // 🧠 باقي الشغل في الخلفية
+    (async () => {
+      try {
+        const sector = device.sectorId;
+        const finalOwnerId = device.ownerId || sector.ownerId;
+        const finalSectorId = sector._id;
 
-    try {
-      // إرسال البيانات لسيرفر عمرو
-      const aiResponse = await axios.post(
-        process.env.AI_API_URL ||
-          "https://Amrkhaled2004.pythonanywhere.com/api/mobile_predict",
-        {
-          cropType: sector.cropType,
-          temperature: temp,
-          humidity: hum,
-          soilMoisture: Soil,
-          soilTemp: 0,
-          light: light,
-        },
-        { timeout: 5000 }, // تقليل الـ timeout لسرعة الرد على الـ ESP
-      );
-
-      if (aiResponse.data) {
-        aiAnalysis = {
-          status: aiResponse.data.status || "Unknown",
-          recommendation: aiResponse.data.recommendations
-            ? aiResponse.data.recommendations.join(" | ")
-            : "لا توجد توصيات",
+        // 🔥 AI Analysis (اختياري)
+        let aiAnalysis = {
+          status: "Unknown",
+          recommendation: "AI not available",
         };
-      }
-    } catch (aiErr) {
-      console.log("⚠️ AI Server unreachable:", aiErr.message);
-    }
 
-    // 4. حفظ القراءة في الداتابيز (استخدام القيم اللي عملنا لها parseFloat)
-    const newData = await SensorData.create({
-      ownerId: finalOwnerId,
-      sectorId: finalSectorId,
-      deviceId: device._id,
-      air: { temperature: temp, humidity: hum },
-      soil: { moisture: Soil, temperature: null },
-      light: String(light),
-      analysis: aiAnalysis,
-    });
+        try {
+          const aiResponse = await axios.post(
+            process.env.AI_API_URL ||
+              "https://Amrkhaled2004.pythonanywhere.com/api/mobile_predict",
+            {
+              cropType: sector.cropType,
+              temperature: temp,
+              humidity: hum,
+              soilMoisture: Soil,
+              soilTemp: 0,
+              light: light,
+            },
+            { timeout: 2000 }, // مهم جدًا
+          );
 
-    // 5. تحديث حالة الجهاز لـ Online
-    await Device.findByIdAndUpdate(device._id, {
-      status: "online",
-      lastPing: Date.now(),
-    });
-
-    // 5. 🔔 نظام التنبيهات الذكي
-    const criticalStatuses = ["High Stress", "Danger", "Critical", "Warning"];
-    const isCritical =
-      Number(temp) > 45 ||
-      Number(Soil) < 10 ||
-      criticalStatuses.includes(aiAnalysis.status);
-
-    if (isCritical) {
-      const io = req.app.get("io");
-
-      const socketPayload = {
-        title: "🚨 تنبيه خطر فوري",
-        message: `القطاع: ${sector.name} | الحالة: ${aiAnalysis.status} | حرارة: ${temp}°C`,
-        sectorId: finalSectorId,
-        createdAt: new Date(),
-      };
-
-      // جلب التوكنز للمالك والعامل
-      const usersToNotify = await User.find({
-        _id: { $in: [finalOwnerId, assignedWorkerId].filter(Boolean) },
-      }).select("fcmToken");
-
-      // إرسال Firebase Push
-      usersToNotify.forEach(async (user) => {
-        if (user.fcmToken) {
-          try {
-            await axios.post(
-              "https://fcm.googleapis.com/fcm/send",
-              {
-                to: user.fcmToken,
-                notification: {
-                  title: socketPayload.title,
-                  body: socketPayload.message,
-                  sound: "default",
-                },
-                priority: "high",
-              },
-              {
-                headers: {
-                  Authorization: `key=${process.env.FIREBASE_SERVER_KEY}`,
-                  "Content-Type": "application/json",
-                },
-              },
-            );
-          } catch (fcmErr) {
-            console.error("❌ Firebase Error:", fcmErr.message);
+          if (aiResponse.data) {
+            aiAnalysis = {
+              status: aiResponse.data.status || "Unknown",
+              recommendation: aiResponse.data.recommendations
+                ? aiResponse.data.recommendations.join(" | ")
+                : "No recommendations",
+            };
           }
+        } catch (e) {
+          console.log("⚠️ AI Error:", e.message);
         }
-      });
 
-      // إرسال Socket.io
-      if (finalOwnerId)
-        io.to(finalOwnerId.toString()).emit("newNotification", socketPayload);
-      if (assignedWorkerId)
-        io.to(assignedWorkerId.toString()).emit(
-          "newNotification",
-          socketPayload,
-        );
-
-      // حفظ في الهيستوري
-      const notificationsToSave = [
-        {
-          recipient: finalOwnerId,
+        // 💾 Save data
+        await SensorData.create({
+          ownerId: finalOwnerId,
           sectorId: finalSectorId,
-          title: socketPayload.title,
-          message: socketPayload.message,
-          type: "warning",
-        },
-      ];
-
-      if (assignedWorkerId) {
-        notificationsToSave.push({
-          recipient: assignedWorkerId,
-          sectorId: finalSectorId,
-          title: socketPayload.title,
-          message: socketPayload.message,
-          type: "warning",
+          deviceId: device._id,
+          air: { temperature: temp, humidity: hum },
+          soil: { moisture: Soil, temperature: null },
+          light: String(light),
+          analysis: aiAnalysis,
         });
+
+        // 🔄 Update device status
+        await Device.findByIdAndUpdate(device._id, {
+          status: "online",
+          lastPing: Date.now(),
+        });
+      } catch (err) {
+        console.log("❌ Background error:", err.message);
       }
-
-      await Notification.insertMany(notificationsToSave);
-    }
-
-    res.status(201).json({ success: true, data: newData });
+    })();
   } catch (err) {
     console.error("❌ General Error:", err.message);
     res.status(500).json({ success: false, error: err.message });
