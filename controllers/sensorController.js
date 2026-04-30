@@ -56,7 +56,7 @@ exports.uploadData = async (req, res) => {
 
     const sector = device.sectorId;
 
-    // 🧠 AI FIRST (قبل التخزين النهائي)
+    // 🧠 AI FIRST (مهم جدًا)
     let aiAnalysis = {
       status: "Safe",
       recommendation: "No AI response",
@@ -72,7 +72,7 @@ exports.uploadData = async (req, res) => {
           soilMoisture: Soil,
           light: light,
         },
-        { timeout: 5000 },
+        { timeout: 4000 },
       );
 
       if (aiResponse.data) {
@@ -87,26 +87,29 @@ exports.uploadData = async (req, res) => {
       console.log("AI Error:", err.message);
     }
 
-    // 💾 SAVE ONCE (مهم جدًا)
-    const newData = await SensorData.create({
+    // 💾 SAVE FINAL (مرة واحدة فقط)
+    const saved = await SensorData.create({
       ownerId: device.ownerId || sector.ownerId,
       sectorId: sector._id,
       deviceId: device._id,
       air: { temperature: temp, humidity: hum },
       soil: { moisture: Soil },
       light: String(light),
-      analysis: aiAnalysis, // 🔥 هنا خلاص النهائي
+      analysis: aiAnalysis,
     });
 
+    // 🔄 update device
     await Device.findByIdAndUpdate(device._id, {
       status: "online",
       lastPing: Date.now(),
     });
 
-    // ⚡ رد سريع
-    return res.status(200).json({ success: true });
+    return res.status(200).json({
+      success: true,
+      data: saved,
+    });
   } catch (err) {
-    console.error(err.message);
+    console.error("Error:", err.message);
     return res.status(500).json({ success: false });
   }
 };
