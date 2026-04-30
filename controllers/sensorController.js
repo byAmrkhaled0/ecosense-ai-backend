@@ -39,46 +39,27 @@ const formatLightValue = (light) => {
 exports.uploadData = async (req, res) => {
   try {
     const { deviceSerial } = req.body;
+
     const temp = parseFloat(req.body.temp) || 0;
     const hum = parseFloat(req.body.hum) || 0;
     const Soil = parseFloat(req.body.Soil) || 0;
     const light = req.body.light || "Unknown";
 
-    if (!deviceSerial)
-      return res
-        .status(400)
-        .json({ success: false, message: "deviceSerial مطلوب" });
+    if (!deviceSerial) {
+      return res.status(400).json({ success: false });
+    }
 
     const device = await Device.findOne({ deviceSerial }).populate("sectorId");
-    if (!device || !device.sectorId)
-      return res
-        .status(404)
-        .json({ success: false, message: "الجهاز غير مربوط" });
+    if (!device || !device.sectorId) {
+      return res.status(404).json({ success: false });
+    }
 
     const sector = device.sectorId;
-    const finalOwnerId = device.ownerId || sector.ownerId;
-    const assignedWorkerId = sector.assignedWorker;
 
-    // 1. حفظ البيانات فوراً بنجاح
-    const newData = await SensorData.create({
-      ownerId: finalOwnerId,
-      sectorId: sector._id,
-      deviceId: device._id,
-      air: { temperature: temp, humidity: hum },
-      soil: { moisture: Soil },
-      light: String(light),
-      analysis: { status: "Safe", recommendation: "جاري طلب التحليل..." },
-    });
-
-    await Device.findByIdAndUpdate(device._id, {
-      status: "online",
-      lastPing: Date.now(),
-    });
-
-    // 2. طلب الـ AI وتحديث السجل (لازم يتم هنا قبل الـ res.status)
+    // 🧠 AI FIRST (قبل التخزين النهائي)
     let aiAnalysis = {
       status: "Safe",
-      recommendation: "سيرفر الـ AI لم يستجب بسرعة",
+      recommendation: "No AI response",
     };
 
     try {
@@ -91,127 +72,42 @@ exports.uploadData = async (req, res) => {
           soilMoisture: Soil,
           light: light,
         },
-        {
-          headers: { "ngrok-skip-browser-warning": "true" },
-          timeout: 6000, // مهلة 6 ثواني لضمان عدم تعليق السيرفر
-        },
+        { timeout: 5000 },
       );
 
       if (aiResponse.data) {
         aiAnalysis = {
           status: aiResponse.data.status || "Safe",
           recommendation:
-            aiResponse.data.recommendations?.join(" | ") || "لا توجد توصيات",
+            aiResponse.data.recommendations?.join(" | ") ||
+            "No recommendations",
         };
-
-        // 🔥 التحديث هنا بيضمن إن updatedAt يتغير فعلاً
-        await SensorData.findByIdAndUpdate(newData._id, {
-          analysis: aiAnalysis,
-        });
       }
-    } catch (aiErr) {
-      console.log("AI Timeout/Error: " + aiErr.message);
+    } catch (err) {
+      console.log("AI Error:", err.message);
     }
 
-    // 3. الرد على الجهاز - بنبعته بعد ما نتأكد إن الداتا اتحدثت
-    res.status(200).json({ success: true, message: "Accepted" });
+    // 💾 SAVE ONCE (مهم جدًا)
+    const newData = await SensorData.create({
+      ownerId: device.ownerId || sector.ownerId,
+      sectorId: sector._id,
+      deviceId: device._id,
+      air: { temperature: temp, humidity: hum },
+      soil: { moisture: Soil },
+      light: String(light),
+      analysis: aiAnalysis, // 🔥 هنا خلاص النهائي
+    });
 
-    // 4. التنبيهات (ممكن تفضل في الخلفية لأنها مش بتأثر على سجل الـ SensorData)
-    (async () => {
-      try {
-        const currentStatus = aiAnalysis.status;
-        const criticalStatuses = [
-          "High Stress",
-          "Danger",
-          "Critical",
-          "Warning",
-        ];
-        const isCritical =
-          temp > 45 || Soil < 10 || criticalStatuses.includes(currentStatus);
+    await Device.findByIdAndUpdate(device._id, {
+      status: "online",
+      lastPing: Date.now(),
+    });
 
-        if (isCritical) {
-          const io = req.app.get("io");
-          const socketPayload = {
-            title: "🚨 تنبيه خطر فوري",
-            message: `القطاع: ${sector.name} | الحالة: ${currentStatus} | حرارة: ${temp}°C`,
-            sectorId: sector._id,
-            createdAt: new Date(),
-          };
-
-          const usersToNotify = await User.find({
-            _id: { $in: [finalOwnerId, assignedWorkerId].filter(Boolean) },
-          }).select("fcmToken");
-
-          for (const user of usersToNotify) {
-            if (user.fcmToken) {
-              try {
-                await axios.post(
-                  "https://fcm.googleapis.com/fcm/send",
-                  {
-                    to: user.fcmToken,
-                    notification: {
-                      title: socketPayload.title,
-                      body: socketPayload.message,
-                      sound: "default",
-                    },
-                    priority: "high",
-                  },
-                  {
-                    headers: {
-                      Authorization: `key=${process.env.FIREBASE_SERVER_KEY}`,
-                      "Content-Type": "application/json",
-                    },
-                    timeout: 4000,
-                  },
-                );
-              } catch (fcmErr) {
-                console.log("Firebase Error");
-              }
-            }
-          }
-
-          if (io) {
-            if (finalOwnerId)
-              io.to(finalOwnerId.toString()).emit(
-                "newNotification",
-                socketPayload,
-              );
-            if (assignedWorkerId)
-              io.to(assignedWorkerId.toString()).emit(
-                "newNotification",
-                socketPayload,
-              );
-          }
-
-          const notificationsToSave = [
-            {
-              recipient: finalOwnerId,
-              sectorId: sector._id,
-              title: socketPayload.title,
-              message: socketPayload.message,
-              type: "warning",
-            },
-          ];
-          if (assignedWorkerId) {
-            notificationsToSave.push({
-              recipient: assignedWorkerId,
-              sectorId: sector._id,
-              title: socketPayload.title,
-              message: socketPayload.message,
-              type: "warning",
-            });
-          }
-          await Notification.insertMany(notificationsToSave);
-        }
-      } catch (bgErr) {
-        console.error("Notification Error:", bgErr.message);
-      }
-    })();
+    // ⚡ رد سريع
+    return res.status(200).json({ success: true });
   } catch (err) {
-    console.error("❌ Controller Error:", err.message);
-    if (!res.headersSent) {
-      res.status(500).json({ success: false, error: err.message });
-    }
+    console.error(err.message);
+    return res.status(500).json({ success: false });
   }
 };
 
