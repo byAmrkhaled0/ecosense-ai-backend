@@ -6,7 +6,6 @@ const axios = require("axios");
 const mongoose = require("mongoose");
 const User = require("../models/User");
 
-// 1. دالة بسيطة لتنسيق نوع المحصول (لأن عمرو مستني Corn مش maize)
 /* ============================================================
    HELPERS (التنسيق لمتطلبات الـ AI)
    ============================================================ */
@@ -38,7 +37,8 @@ const formatLightValue = (light) => {
    ============================================================ */
 exports.uploadData = async (req, res) => {
   try {
-    const { deviceSerial, temp, hum, Soil, soilTemp, light } = req.body;
+    // تم إزالة soilTemp من هنا
+    const { deviceSerial, temp, hum, Soil, light } = req.body;
 
     if (!deviceSerial) {
       return res
@@ -66,7 +66,6 @@ exports.uploadData = async (req, res) => {
       status: "Unknown",
       recommendation: "سيرفر الـ AI غير متصل",
     };
-    let aiRawResponse = null;
 
     try {
       const aiResponse = await axios.post(
@@ -77,7 +76,7 @@ exports.uploadData = async (req, res) => {
           temperature: Number(temp),
           humidity: Number(hum),
           soilMoisture: Number(Soil),
-          soilTemp: Number(soilTemp),
+          soilTemp: 0, // نرسل قيمة صفرية طالما السنسور غير متاح تقنياً
           light: formatLightValue(light),
         },
         {
@@ -86,18 +85,16 @@ exports.uploadData = async (req, res) => {
         },
       );
 
-      aiRawResponse = aiResponse.data;
-      if (aiRawResponse) {
+      if (aiResponse.data) {
         aiAnalysis = {
-          status: aiRawResponse.status || "Unknown",
-          recommendation: aiRawResponse.recommendations
-            ? aiRawResponse.recommendations.join(" | ")
+          status: aiResponse.data.status || "Unknown",
+          recommendation: aiResponse.data.recommendations
+            ? aiResponse.data.recommendations.join(" | ")
             : "لا توجد توصيات",
         };
       }
     } catch (aiErr) {
       console.log("⚠️ AI Server unreachable:", aiErr.message);
-      // هنا aiAnalysis هتفضل شايلة القيم الافتراضية "غير متصل"
     }
 
     // 3. حفظ القراءة في الداتابيز
@@ -106,7 +103,7 @@ exports.uploadData = async (req, res) => {
       sectorId: finalSectorId,
       deviceId: device._id,
       air: { temperature: temp, humidity: hum },
-      soil: { moisture: Soil, temperature: soilTemp },
+      soil: { moisture: Soil, temperature: null }, // نضعها null لأنها غير متوفرة
       light: String(light),
       analysis: aiAnalysis,
     });
@@ -118,7 +115,6 @@ exports.uploadData = async (req, res) => {
     });
 
     // 5. 🔔 نظام التنبيهات الذكي
-    // بنحدد حالات الخطر (لو عمرو قال خطر، أو لو السنسورز قرت أرقام خيالية)
     const criticalStatuses = ["High Stress", "Danger", "Critical", "Warning"];
     const isCritical =
       Number(temp) > 45 ||
@@ -135,14 +131,12 @@ exports.uploadData = async (req, res) => {
         createdAt: new Date(),
       };
 
-      // --- [ 🔥 الجزء الخاص بـ Firebase Push بدأ هنا ] ---
-
-      // 1. هنجيب بيانات المالك والعامل من الداتابيز عشان ناخد الـ fcmToken بتاعهم
+      // جلب التوكنز للمالك والعامل
       const usersToNotify = await User.find({
         _id: { $in: [finalOwnerId, assignedWorkerId].filter(Boolean) },
       }).select("fcmToken");
 
-      // 2. دالة إرسال الطلب لـ Firebase
+      // إرسال Firebase Push
       usersToNotify.forEach(async (user) => {
         if (user.fcmToken) {
           try {
@@ -169,9 +163,8 @@ exports.uploadData = async (req, res) => {
           }
         }
       });
-      // --- [ 🔥 نهاية جزء Firebase ] ---
 
-      // 1. ابعت الإشعار "حالا" للموبايل (Socket.io)
+      // إرسال Socket.io
       if (finalOwnerId)
         io.to(finalOwnerId.toString()).emit("newNotification", socketPayload);
       if (assignedWorkerId)
@@ -180,15 +173,16 @@ exports.uploadData = async (req, res) => {
           socketPayload,
         );
 
-      // 2. احفظ الإشعار في الداتابيز عشان يفضل موجود في الهيستوري (للحالات الحرجة فقط)
-      const notificationsToSave = [];
-      notificationsToSave.push({
-        recipient: finalOwnerId,
-        sectorId: finalSectorId,
-        title: socketPayload.title,
-        message: socketPayload.message,
-        type: "warning",
-      });
+      // حفظ في الهيستوري
+      const notificationsToSave = [
+        {
+          recipient: finalOwnerId,
+          sectorId: finalSectorId,
+          title: socketPayload.title,
+          message: socketPayload.message,
+          type: "warning",
+        },
+      ];
 
       if (assignedWorkerId) {
         notificationsToSave.push({
@@ -201,9 +195,6 @@ exports.uploadData = async (req, res) => {
       }
 
       await Notification.insertMany(notificationsToSave);
-      console.log(
-        `📢 Alert saved and sent via Socket & Firebase for sector: ${sector.name}`,
-      );
     }
 
     res.status(201).json({ success: true, data: newData });
@@ -212,6 +203,7 @@ exports.uploadData = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
+
 /* ============================================================
 2️⃣ GET LATEST READING (آخر قراءة محدثة للـ Dashboard)
 ============================================================ */
@@ -221,13 +213,11 @@ exports.getLatest = async (req, res) => {
     let filter = {};
 
     if (req.user.role === "worker") {
-      // 🚩 نجيب كل الـ IDs للقطاعات اللي العامل مسؤول عنها
       const workerSectors = await Sector.find({
         assignedWorker: req.user._id,
       }).select("_id");
       const workerSectorIds = workerSectors.map((s) => s._id);
 
-      // لو باعت ID معين، نتأكد إنه ضمن حاجته، لو مش باعت، ندور في كل حاجته
       if (sectorId) {
         if (!workerSectorIds.map((id) => id.toString()).includes(sectorId)) {
           return res.status(403).json({
@@ -240,7 +230,6 @@ exports.getLatest = async (req, res) => {
         filter = { sectorId: { $in: workerSectorIds } };
       }
     } else {
-      // المالك
       filter = sectorId
         ? { ownerId: req.user._id, sectorId }
         : { ownerId: req.user._id };
@@ -263,6 +252,7 @@ exports.getLatest = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
+
 /* ============================================================
 3️⃣ GET HISTORY (سجل البيانات مع الفلترة)
 ============================================================ */
@@ -300,7 +290,6 @@ exports.getHistory = async (req, res) => {
       if (sectorId) filter.sectorId = sectorId;
     }
 
-    // بقية الفلاتر (التاريخ والحالة)
     if (status) filter["analysis.status"] = status;
     if (startDate || endDate) {
       filter.createdAt = {};
@@ -326,6 +315,7 @@ exports.getHistory = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
+
 /* ============================================================
 4️⃣ GET ANALYTICS (تحليلات الأداء اليومي)
 ============================================================ */
@@ -339,7 +329,6 @@ exports.getAnalytics = async (req, res) => {
         .json({ success: false, message: "يجب تحديد معرف القطاع" });
     }
 
-    // 🚩 التحقق من الصلاحية قبل البدء
     if (req.user.role === "worker") {
       const isAssigned = await Sector.findOne({
         _id: sectorId,
@@ -352,7 +341,6 @@ exports.getAnalytics = async (req, res) => {
         });
       }
     } else {
-      // التأكد إن القطاع يخص المالك
       const isOwner = await Sector.findOne({
         _id: sectorId,
         ownerId: req.user._id,

@@ -32,12 +32,12 @@ const SensorDataSchema = new mongoose.Schema(
       humidity: { type: Number, default: null },
     },
 
-    // 🌱 قراءات التربة
+    // 🌱 قراءات التربة (تم تحديثها لتناسب السنسورات المتاحة)
     soil: {
-      moisture: { type: Number, default: null }, // رطوبة التربة (المتوسط)
-      temperature: { type: Number, default: null }, // حرارة التربة
+      moisture: { type: Number, default: null }, // رطوبة التربة (المتوفرة)
+      temperature: { type: Number, default: null }, // حرارة التربة (ستبقى null حالياً)
 
-      // [إضافة]: لو عندك كذا سنسور رطوبة في نفس القطعة
+      // لو قررت مستقبلاً تضيف كذا سنسور رطوبة
       individual_sensors: [{ type: Number }],
     },
 
@@ -49,17 +49,17 @@ const SensorDataSchema = new mongoose.Schema(
       status: {
         type: String,
         default: "Unknown",
-        // شيل السطر بتاع enum: ['Danger', 'Safe'...] لو موجود
       },
       recommendation: { type: String },
     },
   },
   {
+    // بيضيف تلقائياً وقت إنشاء القراءة (createdAt) ووقت تحديثها (updatedAt)
     timestamps: true,
   },
 );
 
-// تحسين البحث للـ Dashboard
+// تحسين أداء البحث للـ Dashboard والتقارير
 SensorDataSchema.index({ ownerId: 1, sectorId: 1, createdAt: -1 });
 
 module.exports = mongoose.model("SensorData", SensorDataSchema);
