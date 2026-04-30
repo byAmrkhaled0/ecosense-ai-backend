@@ -40,44 +40,36 @@ const formatLightValue = (light) => {
 exports.uploadData = async (req, res) => {
   try {
     const { deviceSerial } = req.body;
-
-    // 1. تحويل البيانات لأرقام لضمان سلامة العمليات الحسابية
     const temp = parseFloat(req.body.temp) || 0;
     const hum = parseFloat(req.body.hum) || 0;
     const Soil = parseFloat(req.body.Soil) || 0;
     const light = req.body.light || "Unknown";
 
-    // التحقق من وجود السيريال نمبر
-    if (!deviceSerial) {
-      return res.status(400).json({
-        success: false,
-        message: "deviceSerial مطلوب",
-      });
-    }
+    if (!deviceSerial)
+      return res
+        .status(400)
+        .json({ success: false, message: "deviceSerial مطلوب" });
 
-    // 2. البحث عن الجهاز والقطاع المرتبط به
+    // البحث السريع عن الجهاز
     const device = await Device.findOne({ deviceSerial }).populate("sectorId");
-
     if (!device || !device.sectorId) {
-      return res.status(404).json({
-        success: false,
-        message: "الجهاز غير مربوط بقطاع أو غير مسجل",
-      });
+      return res
+        .status(404)
+        .json({ success: false, message: "الجهاز غير مربوط بقطاع" });
     }
 
     const sector = device.sectorId;
     const finalOwnerId = device.ownerId || sector.ownerId;
     const assignedWorkerId = sector.assignedWorker;
 
-    // 🔥 الرد الفوري على الـ ESP32 لإنهاء الاتصال وتجنب الـ Timeout
+    // 🔥 الرد الفوري - أهم خطوة لمنع الـ Function من التعليق
     res.status(200).json({ success: true, message: "Accepted" });
 
-    // 🧠 تشغيل العمليات في الخلفية (Background Task)
+    // 🚀 تنفيذ العمليات فوراً في Background Task
+    // ملاحظة: Vercel قد يقتل العمليات المطولة هنا، لذا نستخدم Timeouts قصيرة
     (async () => {
       try {
-        // ==========================================
-        // 💾 الخطوة 1: حفظ بيانات الحساسات فوراً (بدون انتظار الـ AI)
-        // ==========================================
+        // 1. حفظ الداتا الأساسية (دي أهم حاجة عشان تسمع في الـ Dashboard)
         const newData = await SensorData.create({
           ownerId: finalOwnerId,
           sectorId: sector._id,
@@ -86,23 +78,21 @@ exports.uploadData = async (req, res) => {
           soil: { moisture: Soil },
           light: String(light),
           analysis: {
-            status: "Processing...",
-            recommendation: "جاري طلب التحليل من سيرفر الـ AI...",
+            status: "جاري التحليل...",
+            recommendation: "يتم التواصل مع سيرفر الـ AI",
           },
         });
 
-        // تحديث حالة الجهاز (Ping)
+        // تحديث الـ Ping
         await Device.findByIdAndUpdate(device._id, {
           status: "online",
           lastPing: Date.now(),
         });
 
-        // ==========================================
-        // 🤖 الخطوة 2: طلب تحليل الـ AI (بشكل منفصل)
-        // ==========================================
+        // 2. طلب الـ AI بـ Timeout "قصير جداً" عشان الـ Function متفصلش
         let aiAnalysis = {
           status: "Unknown",
-          recommendation: "سيرفر الـ AI لم يستجب في الوقت المحدد",
+          recommendation: "سيرفر الـ AI استغرق وقتاً طويلاً",
         };
 
         try {
@@ -114,30 +104,28 @@ exports.uploadData = async (req, res) => {
               temperature: temp,
               humidity: hum,
               soilMoisture: Soil,
-              soilTemp: 0,
               light: light,
             },
             {
               headers: { "ngrok-skip-browser-warning": "true" },
-              timeout: 10000, // مهلة 10 ثوانٍ لسيرفر عمرو
+              timeout: 5000, // 5 ثواني فقط، لو زاد عن كده بنكمل من غيره
             },
           );
 
           if (aiResponse.data) {
             aiAnalysis = {
               status: aiResponse.data.status || "Safe",
-              recommendation: aiResponse.data.recommendations
-                ? aiResponse.data.recommendations.join(" | ")
-                : "لا توجد توصيات حالية",
+              recommendation:
+                aiResponse.data.recommendations?.join(" | ") ||
+                "لا توجد توصيات",
             };
-
-            // تحديث سجل البيانات اللي سيفناه بنتيجة الـ AI الجديدة
+            // تحديث السجل بالنتيجة
             await SensorData.findByIdAndUpdate(newData._id, {
               analysis: aiAnalysis,
             });
           }
         } catch (aiErr) {
-          console.log("⚠️ AI Server Error/Timeout, keeping initial record.");
+          console.log("AI Task skipped due to timeout/error");
         }
 
         // ==========================================
