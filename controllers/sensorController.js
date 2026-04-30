@@ -59,7 +59,7 @@ exports.uploadData = async (req, res) => {
     const finalOwnerId = device.ownerId || sector.ownerId;
     const assignedWorkerId = sector.assignedWorker;
 
-    // 1. حفظ البيانات فوراً (أهم خطوة)
+    // 1. حفظ البيانات فوراً بنجاح
     const newData = await SensorData.create({
       ownerId: finalOwnerId,
       sectorId: sector._id,
@@ -75,7 +75,7 @@ exports.uploadData = async (req, res) => {
       lastPing: Date.now(),
     });
 
-    // 2. طلب الـ AI (هنستنى هنا عشان نضمن التحديث في Vercel)
+    // 2. طلب الـ AI وتحديث السجل (لازم يتم هنا قبل الـ res.status)
     let aiAnalysis = {
       status: "Safe",
       recommendation: "سيرفر الـ AI لم يستجب بسرعة",
@@ -94,7 +94,7 @@ exports.uploadData = async (req, res) => {
         },
         {
           headers: { "ngrok-skip-browser-warning": "true" },
-          timeout: 6000, // مهلة 6 ثواني
+          timeout: 6000, // مهلة 6 ثواني لضمان عدم تعليق السيرفر
         },
       );
 
@@ -105,7 +105,7 @@ exports.uploadData = async (req, res) => {
             aiResponse.data.recommendations?.join(" | ") || "لا توجد توصيات",
         };
 
-        // 🔥 تحديث السجل فوراً بالنتيجة الفعلية قبل إرسال الرد
+        // 🔥 التحديث هنا بيضمن إن updatedAt يتغير فعلاً
         await SensorData.findByIdAndUpdate(newData._id, {
           analysis: aiAnalysis,
         });
@@ -114,10 +114,10 @@ exports.uploadData = async (req, res) => {
       console.log("AI Timeout/Error: " + aiErr.message);
     }
 
-    // 3. الرد على الجهاز (صاحبك) - الآن نرسل الرد بعد ضمان حفظ وتحديث البيانات
+    // 3. الرد على الجهاز - بنبعته بعد ما نتأكد إن الداتا اتحدثت
     res.status(200).json({ success: true, message: "Accepted" });
 
-    // 4. نظام التنبيهات (Background) - دي ممكن تبقى في الخلفية لأنها مش بتغير في SensorData
+    // 4. التنبيهات (ممكن تفضل في الخلفية لأنها مش بتأثر على سجل الـ SensorData)
     (async () => {
       try {
         const currentStatus = aiAnalysis.status;
@@ -166,7 +166,7 @@ exports.uploadData = async (req, res) => {
                   },
                 );
               } catch (fcmErr) {
-                console.log("Firebase Notification Error");
+                console.log("Firebase Error");
               }
             }
           }
