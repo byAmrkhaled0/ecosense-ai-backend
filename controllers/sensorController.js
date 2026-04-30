@@ -40,36 +40,45 @@ const formatLightValue = (light) => {
 exports.uploadData = async (req, res) => {
   try {
     const { deviceSerial } = req.body;
+
+    // 1. تأمين وتحويل البيانات لأرقام
     const temp = parseFloat(req.body.temp) || 0;
     const hum = parseFloat(req.body.hum) || 0;
     const Soil = parseFloat(req.body.Soil) || 0;
     const light = req.body.light || "Unknown";
 
-    if (!deviceSerial)
-      return res
-        .status(400)
-        .json({ success: false, message: "deviceSerial مطلوب" });
+    // التحقق من السيريال نمبر
+    if (!deviceSerial) {
+      return res.status(400).json({
+        success: false,
+        message: "deviceSerial مطلوب",
+      });
+    }
 
-    // البحث السريع عن الجهاز
+    // 2. البحث عن الجهاز والقطاع المرتبط به
     const device = await Device.findOne({ deviceSerial }).populate("sectorId");
+
     if (!device || !device.sectorId) {
-      return res
-        .status(404)
-        .json({ success: false, message: "الجهاز غير مربوط بقطاع" });
+      return res.status(404).json({
+        success: false,
+        message: "الجهاز غير مربوط بقطاع أو غير مسجل",
+      });
     }
 
     const sector = device.sectorId;
     const finalOwnerId = device.ownerId || sector.ownerId;
     const assignedWorkerId = sector.assignedWorker;
 
-    // 🔥 الرد الفوري - أهم خطوة لمنع الـ Function من التعليق
+    // 🔥 الرد الفوري على الـ ESP32 عشان Vercel ميحسش إن الـ Function معلقة
     res.status(200).json({ success: true, message: "Accepted" });
 
-    // 🚀 تنفيذ العمليات فوراً في Background Task
-    // ملاحظة: Vercel قد يقتل العمليات المطولة هنا، لذا نستخدم Timeouts قصيرة
+    // 🧠 تشغيل العمليات الثقيلة في الخلفية (Background Task)
     (async () => {
       try {
-        // 1. حفظ الداتا الأساسية (دي أهم حاجة عشان تسمع في الـ Dashboard)
+        // ==========================================
+        // 💾 الخطوة 1: حفظ بيانات الحساسات فوراً
+        // ==========================================
+        // بنحط حالة مبدئية "Safe" عشان الداتا تظهر فوراً في الـ Dashboard
         const newData = await SensorData.create({
           ownerId: finalOwnerId,
           sectorId: sector._id,
@@ -78,22 +87,21 @@ exports.uploadData = async (req, res) => {
           soil: { moisture: Soil },
           light: String(light),
           analysis: {
-            status: "جاري التحليل...",
-            recommendation: "يتم التواصل مع سيرفر الـ AI",
+            status: "Safe",
+            recommendation: "جاري تحديث التحليل من سيرفر الـ AI...",
           },
         });
 
-        // تحديث الـ Ping
+        // تحديث حالة الجهاز (Ping)
         await Device.findByIdAndUpdate(device._id, {
           status: "online",
           lastPing: Date.now(),
         });
 
-        // 2. طلب الـ AI بـ Timeout "قصير جداً" عشان الـ Function متفصلش
-        let aiAnalysis = {
-          status: "Unknown",
-          recommendation: "سيرفر الـ AI استغرق وقتاً طويلاً",
-        };
+        // ==========================================
+        // 🤖 الخطوة 2: طلب تحليل الـ AI (وقت انتظار قصير)
+        // ==========================================
+        let aiAnalysis = null;
 
         try {
           const aiResponse = await axios.post(
@@ -104,49 +112,53 @@ exports.uploadData = async (req, res) => {
               temperature: temp,
               humidity: hum,
               soilMoisture: Soil,
+              soilTemp: 0,
               light: light,
             },
             {
               headers: { "ngrok-skip-browser-warning": "true" },
-              timeout: 5000, // 5 ثواني فقط، لو زاد عن كده بنكمل من غيره
+              timeout: 5000, // 5 ثواني كحد أقصى لانتظار سيرفر عمرو
             },
           );
 
           if (aiResponse.data) {
             aiAnalysis = {
               status: aiResponse.data.status || "Safe",
-              recommendation:
-                aiResponse.data.recommendations?.join(" | ") ||
-                "لا توجد توصيات",
+              recommendation: aiResponse.data.recommendations
+                ? aiResponse.data.recommendations.join(" | ")
+                : "لا توجد توصيات حالية",
             };
-            // تحديث السجل بالنتيجة
+
+            // تحديث السجل بنتيجة الـ AI الحقيقية
             await SensorData.findByIdAndUpdate(newData._id, {
               analysis: aiAnalysis,
             });
           }
         } catch (aiErr) {
-          console.log("AI Task skipped due to timeout/error");
+          console.log(
+            "⚠️ AI Server Timeout or Error - Keeping initial record.",
+          );
         }
 
         // ==========================================
-        // 🚨 الخطوة 3: نظام التنبيهات (Notification)
+        // 🚨 الخطوة 3: نظام التنبيهات (فقط لو فيه خطر)
         // ==========================================
+        const currentStatus = aiAnalysis ? aiAnalysis.status : "Safe";
         const criticalStatuses = [
           "High Stress",
           "Danger",
           "Critical",
           "Warning",
         ];
+
         const isCritical =
-          temp > 45 ||
-          Soil < 10 ||
-          criticalStatuses.includes(aiAnalysis.status);
+          temp > 45 || Soil < 10 || criticalStatuses.includes(currentStatus);
 
         if (isCritical) {
           const io = req.app.get("io");
           const socketPayload = {
             title: "🚨 تنبيه خطر فوري",
-            message: `القطاع: ${sector.name} | الحالة: ${aiAnalysis.status} | حرارة: ${temp}°C`,
+            message: `القطاع: ${sector.name} | الحالة: ${currentStatus} | حرارة: ${temp}°C`,
             sectorId: sector._id,
             createdAt: new Date(),
           };
@@ -156,7 +168,7 @@ exports.uploadData = async (req, res) => {
             _id: { $in: [finalOwnerId, assignedWorkerId].filter(Boolean) },
           }).select("fcmToken");
 
-          // إرسال Firebase Push Notifications
+          // إرسال Firebase Push Notifications بمهلة زمنية قصيرة
           for (const user of usersToNotify) {
             if (user.fcmToken) {
               try {
@@ -176,6 +188,7 @@ exports.uploadData = async (req, res) => {
                       Authorization: `key=${process.env.FIREBASE_SERVER_KEY}`,
                       "Content-Type": "application/json",
                     },
+                    timeout: 4000,
                   },
                 );
               } catch (fcmErr) {
@@ -198,7 +211,7 @@ exports.uploadData = async (req, res) => {
               );
           }
 
-          // أرشفة التنبيه
+          // أرشفة التنبيه في الهيستوري
           const notificationsToSave = [
             {
               recipient: finalOwnerId,
@@ -208,6 +221,7 @@ exports.uploadData = async (req, res) => {
               type: "warning",
             },
           ];
+
           if (assignedWorkerId) {
             notificationsToSave.push({
               recipient: assignedWorkerId,
