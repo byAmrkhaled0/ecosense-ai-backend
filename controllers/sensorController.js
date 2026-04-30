@@ -32,15 +32,20 @@ const formatLightValue = (light) => {
   return lightMap[normalized] || "Medium";
 };
 
+/* ============================================================ 
+   المسؤول عن استقبال بيانات الحساسات - مشروع EcoSense
+   ============================================================ */
 exports.uploadData = async (req, res) => {
   try {
     const { deviceSerial } = req.body;
 
+    // 1. تأمين تحويل البيانات لأرقام لضمان عدم فشل الـ Validation
     const temp = parseFloat(req.body.temp) || 0;
     const hum = parseFloat(req.body.hum) || 0;
     const Soil = parseFloat(req.body.Soil) || 0;
     const light = req.body.light || "Unknown";
 
+    // التحقق من السيريال نمبر
     if (!deviceSerial) {
       return res.status(400).json({
         success: false,
@@ -48,6 +53,7 @@ exports.uploadData = async (req, res) => {
       });
     }
 
+    // 2. البحث عن الجهاز والتأكد من ربطه بالقطاع
     const device = await Device.findOne({ deviceSerial }).populate("sectorId");
 
     if (!device || !device.sectorId) {
@@ -59,10 +65,10 @@ exports.uploadData = async (req, res) => {
 
     const sector = device.sectorId;
 
-    // 🔥 رد سريع جدًا للـ ESP32 (مهم جدًا)
-    res.status(200).json({ success: true });
+    // 🔥 الرد الفوري على الـ ESP32 لإنهاء الاتصال بنجاح وتجنب Error -1
+    res.status(200).json({ success: true, message: "Accepted" });
 
-    // 🧠 كل الشغل التقيل في الخلفية
+    // 🧠 تشغيل كل العمليات الثقيلة في الخلفية (Event Loop)
     setImmediate(async () => {
       try {
         const finalOwnerId = device.ownerId || sector.ownerId;
@@ -70,14 +76,16 @@ exports.uploadData = async (req, res) => {
         const assignedWorkerId = sector.assignedWorker;
 
         // =========================
-        // 🤖 AI ANALYSIS
+        // 🤖 طلب تحليل الـ AI
         // =========================
         let aiAnalysis = {
           status: "Unknown",
-          recommendation: "No AI response",
+          recommendation: "سيرفر الـ AI غير متصل حالياً",
         };
 
         try {
+          // جلب مكتبة axios داخل الـ Task لو مش معرفة global
+          const axios = require("axios");
           const aiResponse = await axios.post(
             process.env.AI_API_URL ||
               "https://Amrkhaled2004.pythonanywhere.com/api/mobile_predict",
@@ -89,7 +97,10 @@ exports.uploadData = async (req, res) => {
               soilTemp: 0,
               light: light,
             },
-            { timeout: 3000 },
+            {
+              headers: { "ngrok-skip-browser-warning": "true" },
+              timeout: 6000, // وقت انتظار كافٍ لسيرفر عمرو
+            },
           );
 
           if (aiResponse.data) {
@@ -97,15 +108,15 @@ exports.uploadData = async (req, res) => {
               status: aiResponse.data.status || "Unknown",
               recommendation: aiResponse.data.recommendations
                 ? aiResponse.data.recommendations.join(" | ")
-                : "No recommendations",
+                : "لا توجد توصيات حالية",
             };
           }
         } catch (err) {
-          console.log("⚠️ AI Error:", err.message);
+          console.log("⚠️ AI Analysis Background Error:", err.message);
         }
 
         // =========================
-        // 💾 SAVE SENSOR DATA
+        // 💾 حفظ بيانات الحساسات والتحليل
         // =========================
         const newData = await SensorData.create({
           ownerId: finalOwnerId,
@@ -118,7 +129,7 @@ exports.uploadData = async (req, res) => {
         });
 
         // =========================
-        // 📡 UPDATE DEVICE STATUS
+        // 📡 تحديث حالة الجهاز (Ping)
         // =========================
         await Device.findByIdAndUpdate(device._id, {
           status: "online",
@@ -126,7 +137,7 @@ exports.uploadData = async (req, res) => {
         });
 
         // =========================
-        // 🚨 NOTIFICATIONS LOGIC
+        // 🚨 نظام التنبيهات الذكي
         // =========================
         const criticalStatuses = [
           "High Stress",
@@ -134,15 +145,13 @@ exports.uploadData = async (req, res) => {
           "Critical",
           "Warning",
         ];
-
         const isCritical =
-          Number(temp) > 45 ||
-          Number(Soil) < 10 ||
+          temp > 45 ||
+          Soil < 10 ||
           criticalStatuses.includes(aiAnalysis.status);
 
         if (isCritical) {
           const io = req.app.get("io");
-
           const socketPayload = {
             title: "🚨 تنبيه خطر فوري",
             message: `القطاع: ${sector.name} | الحالة: ${aiAnalysis.status} | حرارة: ${temp}°C`,
@@ -150,14 +159,16 @@ exports.uploadData = async (req, res) => {
             createdAt: new Date(),
           };
 
+          // جلب الـ Tokens للمالك والعامل
           const usersToNotify = await User.find({
             _id: { $in: [finalOwnerId, assignedWorkerId].filter(Boolean) },
           }).select("fcmToken");
 
-          // 🔔 Firebase Push
+          // 🔔 إرسال Firebase Push
           for (const user of usersToNotify) {
             if (user.fcmToken) {
               try {
+                const axios = require("axios");
                 await axios.post(
                   "https://fcm.googleapis.com/fcm/send",
                   {
@@ -177,27 +188,26 @@ exports.uploadData = async (req, res) => {
                   },
                 );
               } catch (err) {
-                console.log("Firebase error:", err.message);
+                console.log("Firebase Background Error:", err.message);
               }
             }
           }
 
-          // ⚡ Socket.io realtime
-          if (finalOwnerId) {
-            io.to(finalOwnerId.toString()).emit(
-              "newNotification",
-              socketPayload,
-            );
+          // ⚡ تحديث الـ Dashboard عبر Socket.io
+          if (io) {
+            if (finalOwnerId)
+              io.to(finalOwnerId.toString()).emit(
+                "newNotification",
+                socketPayload,
+              );
+            if (assignedWorkerId)
+              io.to(assignedWorkerId.toString()).emit(
+                "newNotification",
+                socketPayload,
+              );
           }
 
-          if (assignedWorkerId) {
-            io.to(assignedWorkerId.toString()).emit(
-              "newNotification",
-              socketPayload,
-            );
-          }
-
-          // 💾 Save notifications history
+          // 💾 أرشفة التنبيه في الهيستوري
           const notificationsToSave = [
             {
               recipient: finalOwnerId,
@@ -221,15 +231,15 @@ exports.uploadData = async (req, res) => {
           await Notification.insertMany(notificationsToSave);
         }
       } catch (bgErr) {
-        console.log("❌ Background Error:", bgErr.message);
+        console.log("❌ Critical Background Task Error:", bgErr.message);
       }
     });
   } catch (err) {
-    console.error("❌ General Error:", err.message);
-    res.status(500).json({
-      success: false,
-      error: err.message,
-    });
+    console.error("❌ Controller General Error:", err.message);
+    // نرد بـ 500 فقط لو الرد متبعتش (res.status(200) متنفذتش)
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   }
 };
 
