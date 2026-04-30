@@ -35,124 +35,98 @@ const formatLightValue = (light) => {
 /* ============================================================ 
    المسؤول عن استقبال بيانات الحساسات - مشروع EcoSense
    ============================================================ */
-// تأكد من استيراد axios في أعلى الملف
 
 exports.uploadData = async (req, res) => {
   try {
     const { deviceSerial } = req.body;
-
-    // 1. تأمين وتحويل البيانات لأرقام
     const temp = parseFloat(req.body.temp) || 0;
     const hum = parseFloat(req.body.hum) || 0;
     const Soil = parseFloat(req.body.Soil) || 0;
     const light = req.body.light || "Unknown";
 
-    // التحقق من السيريال نمبر
-    if (!deviceSerial) {
-      return res.status(400).json({
-        success: false,
-        message: "deviceSerial مطلوب",
-      });
-    }
+    if (!deviceSerial)
+      return res
+        .status(400)
+        .json({ success: false, message: "deviceSerial مطلوب" });
 
-    // 2. البحث عن الجهاز والقطاع المرتبط به
     const device = await Device.findOne({ deviceSerial }).populate("sectorId");
-
-    if (!device || !device.sectorId) {
-      return res.status(404).json({
-        success: false,
-        message: "الجهاز غير مربوط بقطاع أو غير مسجل",
-      });
-    }
+    if (!device || !device.sectorId)
+      return res
+        .status(404)
+        .json({ success: false, message: "الجهاز غير مربوط" });
 
     const sector = device.sectorId;
     const finalOwnerId = device.ownerId || sector.ownerId;
     const assignedWorkerId = sector.assignedWorker;
 
-    // 🔥 الرد الفوري على الـ ESP32 عشان Vercel ميحسش إن الـ Function معلقة
+    // 1. حفظ البيانات فوراً (أهم خطوة)
+    const newData = await SensorData.create({
+      ownerId: finalOwnerId,
+      sectorId: sector._id,
+      deviceId: device._id,
+      air: { temperature: temp, humidity: hum },
+      soil: { moisture: Soil },
+      light: String(light),
+      analysis: { status: "Safe", recommendation: "جاري طلب التحليل..." },
+    });
+
+    await Device.findByIdAndUpdate(device._id, {
+      status: "online",
+      lastPing: Date.now(),
+    });
+
+    // 2. طلب الـ AI (هنستنى هنا عشان نضمن التحديث في Vercel)
+    let aiAnalysis = {
+      status: "Safe",
+      recommendation: "سيرفر الـ AI لم يستجب بسرعة",
+    };
+
+    try {
+      const aiResponse = await axios.post(
+        process.env.AI_API_URL ||
+          "https://Amrkhaled2004.pythonanywhere.com/api/mobile_predict",
+        {
+          cropType: sector.cropType,
+          temperature: temp,
+          humidity: hum,
+          soilMoisture: Soil,
+          light: light,
+        },
+        {
+          headers: { "ngrok-skip-browser-warning": "true" },
+          timeout: 6000, // مهلة 6 ثواني
+        },
+      );
+
+      if (aiResponse.data) {
+        aiAnalysis = {
+          status: aiResponse.data.status || "Safe",
+          recommendation:
+            aiResponse.data.recommendations?.join(" | ") || "لا توجد توصيات",
+        };
+
+        // 🔥 تحديث السجل فوراً بالنتيجة الفعلية قبل إرسال الرد
+        await SensorData.findByIdAndUpdate(newData._id, {
+          analysis: aiAnalysis,
+        });
+      }
+    } catch (aiErr) {
+      console.log("AI Timeout/Error: " + aiErr.message);
+    }
+
+    // 3. الرد على الجهاز (صاحبك) - الآن نرسل الرد بعد ضمان حفظ وتحديث البيانات
     res.status(200).json({ success: true, message: "Accepted" });
 
-    // 🧠 تشغيل العمليات الثقيلة في الخلفية (Background Task)
+    // 4. نظام التنبيهات (Background) - دي ممكن تبقى في الخلفية لأنها مش بتغير في SensorData
     (async () => {
       try {
-        // ==========================================
-        // 💾 الخطوة 1: حفظ بيانات الحساسات فوراً
-        // ==========================================
-        // بنحط حالة مبدئية "Safe" عشان الداتا تظهر فوراً في الـ Dashboard
-        const newData = await SensorData.create({
-          ownerId: finalOwnerId,
-          sectorId: sector._id,
-          deviceId: device._id,
-          air: { temperature: temp, humidity: hum },
-          soil: { moisture: Soil },
-          light: String(light),
-          analysis: {
-            status: "Safe",
-            recommendation: "جاري تحديث التحليل من سيرفر الـ AI...",
-          },
-        });
-
-        // تحديث حالة الجهاز (Ping)
-        await Device.findByIdAndUpdate(device._id, {
-          status: "online",
-          lastPing: Date.now(),
-        });
-
-        // ==========================================
-        // 🤖 الخطوة 2: طلب تحليل الـ AI (وقت انتظار قصير)
-        // ==========================================
-        let aiAnalysis = null;
-
-        try {
-          const aiResponse = await axios.post(
-            process.env.AI_API_URL ||
-              "https://Amrkhaled2004.pythonanywhere.com/api/mobile_predict",
-            {
-              cropType: sector.cropType,
-              temperature: temp,
-              humidity: hum,
-              soilMoisture: Soil,
-              soilTemp: 0,
-              light: light,
-            },
-            {
-              headers: { "ngrok-skip-browser-warning": "true" },
-              timeout: 5000, // 5 ثواني كحد أقصى لانتظار سيرفر عمرو
-            },
-          );
-
-          if (aiResponse.data) {
-            aiAnalysis = {
-              status: aiResponse.data.status || "Safe",
-              recommendation: aiResponse.data.recommendations
-                ? aiResponse.data.recommendations.join(" | ")
-                : "لا توجد توصيات حالية",
-            };
-
-            // تحديث السجل بنتيجة الـ AI الحقيقية
-            await SensorData.findByIdAndUpdate(newData._id, {
-              analysis: aiAnalysis,
-            });
-          }
-        } catch (aiErr) {
-          console.log("AI Error:", aiErr.message);
-          // تحديث السجل برسالة الخطأ عشان تعرف المشكلة فين من الـ Dashboard
-          await SensorData.findByIdAndUpdate(newData._id, {
-            "analysis.recommendation": "فشل التحليل: " + aiErr.message,
-          });
-        }
-
-        // ==========================================
-        // 🚨 الخطوة 3: نظام التنبيهات (فقط لو فيه خطر)
-        // ==========================================
-        const currentStatus = aiAnalysis ? aiAnalysis.status : "Safe";
+        const currentStatus = aiAnalysis.status;
         const criticalStatuses = [
           "High Stress",
           "Danger",
           "Critical",
           "Warning",
         ];
-
         const isCritical =
           temp > 45 || Soil < 10 || criticalStatuses.includes(currentStatus);
 
@@ -165,12 +139,10 @@ exports.uploadData = async (req, res) => {
             createdAt: new Date(),
           };
 
-          // جلب الـ Tokens للمالك والعامل
           const usersToNotify = await User.find({
             _id: { $in: [finalOwnerId, assignedWorkerId].filter(Boolean) },
           }).select("fcmToken");
 
-          // إرسال Firebase Push Notifications بمهلة زمنية قصيرة
           for (const user of usersToNotify) {
             if (user.fcmToken) {
               try {
@@ -194,12 +166,11 @@ exports.uploadData = async (req, res) => {
                   },
                 );
               } catch (fcmErr) {
-                console.log("Firebase Error:", fcmErr.message);
+                console.log("Firebase Notification Error");
               }
             }
           }
 
-          // تحديث الـ Dashboard عبر Socket.io
           if (io) {
             if (finalOwnerId)
               io.to(finalOwnerId.toString()).emit(
@@ -213,7 +184,6 @@ exports.uploadData = async (req, res) => {
               );
           }
 
-          // أرشفة التنبيه في الهيستوري
           const notificationsToSave = [
             {
               recipient: finalOwnerId,
@@ -223,7 +193,6 @@ exports.uploadData = async (req, res) => {
               type: "warning",
             },
           ];
-
           if (assignedWorkerId) {
             notificationsToSave.push({
               recipient: assignedWorkerId,
@@ -236,7 +205,7 @@ exports.uploadData = async (req, res) => {
           await Notification.insertMany(notificationsToSave);
         }
       } catch (bgErr) {
-        console.error("❌ Background Task Error:", bgErr.message);
+        console.error("Notification Error:", bgErr.message);
       }
     })();
   } catch (err) {
