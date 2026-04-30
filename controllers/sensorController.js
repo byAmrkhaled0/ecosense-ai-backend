@@ -35,7 +35,6 @@ const formatLightValue = (light) => {
 /* ============================================================ 
    المسؤول عن استقبال بيانات الحساسات - مشروع EcoSense
    ============================================================ */
-
 exports.uploadData = async (req, res) => {
   try {
     const { deviceSerial } = req.body;
@@ -56,9 +55,9 @@ exports.uploadData = async (req, res) => {
 
     const sector = device.sectorId;
 
-    // 🧠 AI FIRST (مهم جدًا)
+    // 🧠 1. AI FIRST (ده السر)
     let aiAnalysis = {
-      status: "Unknown",
+      status: "Safe",
       recommendation: "No AI response",
     };
 
@@ -81,7 +80,7 @@ exports.uploadData = async (req, res) => {
       const data = aiResponse.data;
 
       aiAnalysis = {
-        status: data.status || data.prediction || data.result || "Unknown",
+        status: data.status || data.prediction || "Safe",
         recommendation: Array.isArray(data.recommendations)
           ? data.recommendations.join(" | ")
           : data.message || "No recommendations",
@@ -90,7 +89,7 @@ exports.uploadData = async (req, res) => {
       console.log("AI ERROR:", err.message);
     }
 
-    // 💾 SAVE FINAL (مرة واحدة فقط)
+    // 💾 2. SAVE FINAL RESULT ONLY
     const saved = await SensorData.create({
       ownerId: device.ownerId || sector.ownerId,
       sectorId: sector._id,
@@ -101,7 +100,6 @@ exports.uploadData = async (req, res) => {
       analysis: aiAnalysis,
     });
 
-    // 🔄 update device
     await Device.findByIdAndUpdate(device._id, {
       status: "online",
       lastPing: Date.now(),
@@ -112,11 +110,10 @@ exports.uploadData = async (req, res) => {
       data: saved,
     });
   } catch (err) {
-    console.error("Error:", err.message);
+    console.error(err.message);
     return res.status(500).json({ success: false });
   }
 };
-
 /* ============================================================
 2️⃣ GET LATEST READING (آخر قراءة محدثة للـ Dashboard)
 ============================================================ */
