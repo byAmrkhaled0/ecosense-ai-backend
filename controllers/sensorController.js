@@ -69,10 +69,6 @@ exports.uploadData = async (req, res) => {
     });
 
     // 2. طلب تحليل الـ AI أولاً (قبل التخزين)
-    let aiAnalysis = {
-      status: "Safe",
-      recommendation: "سيرفر الـ AI لم يستجب أو حدث خطأ فني",
-    };
 
     try {
       const aiResponse = await axios.post(
@@ -92,7 +88,7 @@ exports.uploadData = async (req, res) => {
       );
 
       if (aiResponse.data) {
-        aiAnalysis = {
+        let aiAnalysis = {
           status: aiResponse.data.status || "Safe",
           recommendation:
             aiResponse.data.recommendations?.join(" | ") ||
