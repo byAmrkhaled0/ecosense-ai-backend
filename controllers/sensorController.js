@@ -83,8 +83,7 @@ exports.uploadData = async (req, res) => {
 
     try {
       const aiResponse = await axios.post(
-        process.env.AI_API_URL ||
-          "https://Amrkhaled2004.pythonanywhere.com/api/mobile_predict",
+        "https://Amrkhaled2004.pythonanywhere.com/api/predict_with_image",
         {
           cropType: sector.cropType,
           temperature: temp,
