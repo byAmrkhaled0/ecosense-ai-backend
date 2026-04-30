@@ -35,19 +35,19 @@ const formatLightValue = (light) => {
 exports.uploadData = async (req, res) => {
   try {
     const { deviceSerial } = req.body;
+
     const temp = parseFloat(req.body.temp) || 0;
     const hum = parseFloat(req.body.hum) || 0;
     const Soil = parseFloat(req.body.Soil) || 0;
     const light = req.body.light || "Unknown";
 
-    // ✅ Validation سريع
     if (!deviceSerial) {
-      return res
-        .status(400)
-        .json({ success: false, message: "deviceSerial مطلوب" });
+      return res.status(400).json({
+        success: false,
+        message: "deviceSerial مطلوب",
+      });
     }
 
-    // ✅ نجيب الجهاز بسرعة
     const device = await Device.findOne({ deviceSerial }).populate("sectorId");
 
     if (!device || !device.sectorId) {
@@ -57,20 +57,24 @@ exports.uploadData = async (req, res) => {
       });
     }
 
-    // 🟢 رجّع response فورًا (أهم خطوة)
+    const sector = device.sectorId;
+
+    // 🔥 رد سريع جدًا للـ ESP32 (مهم جدًا)
     res.status(200).json({ success: true });
 
-    // 🧠 باقي الشغل في الخلفية
-    (async () => {
+    // 🧠 كل الشغل التقيل في الخلفية
+    setImmediate(async () => {
       try {
-        const sector = device.sectorId;
         const finalOwnerId = device.ownerId || sector.ownerId;
         const finalSectorId = sector._id;
+        const assignedWorkerId = sector.assignedWorker;
 
-        // 🔥 AI Analysis (اختياري)
+        // =========================
+        // 🤖 AI ANALYSIS
+        // =========================
         let aiAnalysis = {
           status: "Unknown",
-          recommendation: "AI not available",
+          recommendation: "No AI response",
         };
 
         try {
@@ -85,7 +89,7 @@ exports.uploadData = async (req, res) => {
               soilTemp: 0,
               light: light,
             },
-            { timeout: 2000 }, // مهم جدًا
+            { timeout: 3000 },
           );
 
           if (aiResponse.data) {
@@ -96,12 +100,14 @@ exports.uploadData = async (req, res) => {
                 : "No recommendations",
             };
           }
-        } catch (e) {
-          console.log("⚠️ AI Error:", e.message);
+        } catch (err) {
+          console.log("⚠️ AI Error:", err.message);
         }
 
-        // 💾 Save data
-        await SensorData.create({
+        // =========================
+        // 💾 SAVE SENSOR DATA
+        // =========================
+        const newData = await SensorData.create({
           ownerId: finalOwnerId,
           sectorId: finalSectorId,
           deviceId: device._id,
@@ -111,18 +117,119 @@ exports.uploadData = async (req, res) => {
           analysis: aiAnalysis,
         });
 
-        // 🔄 Update device status
+        // =========================
+        // 📡 UPDATE DEVICE STATUS
+        // =========================
         await Device.findByIdAndUpdate(device._id, {
           status: "online",
           lastPing: Date.now(),
         });
-      } catch (err) {
-        console.log("❌ Background error:", err.message);
+
+        // =========================
+        // 🚨 NOTIFICATIONS LOGIC
+        // =========================
+        const criticalStatuses = [
+          "High Stress",
+          "Danger",
+          "Critical",
+          "Warning",
+        ];
+
+        const isCritical =
+          Number(temp) > 45 ||
+          Number(Soil) < 10 ||
+          criticalStatuses.includes(aiAnalysis.status);
+
+        if (isCritical) {
+          const io = req.app.get("io");
+
+          const socketPayload = {
+            title: "🚨 تنبيه خطر فوري",
+            message: `القطاع: ${sector.name} | الحالة: ${aiAnalysis.status} | حرارة: ${temp}°C`,
+            sectorId: finalSectorId,
+            createdAt: new Date(),
+          };
+
+          const usersToNotify = await User.find({
+            _id: { $in: [finalOwnerId, assignedWorkerId].filter(Boolean) },
+          }).select("fcmToken");
+
+          // 🔔 Firebase Push
+          for (const user of usersToNotify) {
+            if (user.fcmToken) {
+              try {
+                await axios.post(
+                  "https://fcm.googleapis.com/fcm/send",
+                  {
+                    to: user.fcmToken,
+                    notification: {
+                      title: socketPayload.title,
+                      body: socketPayload.message,
+                      sound: "default",
+                    },
+                    priority: "high",
+                  },
+                  {
+                    headers: {
+                      Authorization: `key=${process.env.FIREBASE_SERVER_KEY}`,
+                      "Content-Type": "application/json",
+                    },
+                  },
+                );
+              } catch (err) {
+                console.log("Firebase error:", err.message);
+              }
+            }
+          }
+
+          // ⚡ Socket.io realtime
+          if (finalOwnerId) {
+            io.to(finalOwnerId.toString()).emit(
+              "newNotification",
+              socketPayload,
+            );
+          }
+
+          if (assignedWorkerId) {
+            io.to(assignedWorkerId.toString()).emit(
+              "newNotification",
+              socketPayload,
+            );
+          }
+
+          // 💾 Save notifications history
+          const notificationsToSave = [
+            {
+              recipient: finalOwnerId,
+              sectorId: finalSectorId,
+              title: socketPayload.title,
+              message: socketPayload.message,
+              type: "warning",
+            },
+          ];
+
+          if (assignedWorkerId) {
+            notificationsToSave.push({
+              recipient: assignedWorkerId,
+              sectorId: finalSectorId,
+              title: socketPayload.title,
+              message: socketPayload.message,
+              type: "warning",
+            });
+          }
+
+          await Notification.insertMany(notificationsToSave);
+        }
+      } catch (bgErr) {
+        console.log("❌ Background Error:", bgErr.message);
       }
-    })();
+    });
   } catch (err) {
     console.error("❌ General Error:", err.message);
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
   }
 };
 
