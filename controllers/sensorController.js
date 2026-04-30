@@ -80,10 +80,16 @@ exports.uploadData = async (req, res) => {
       const data = aiResponse.data;
 
       aiAnalysis = {
-        status: data.status || data.prediction || "Safe",
+        status:
+          data.status ||
+          data.prediction ||
+          data.result ||
+          data.class ||
+          "Unknown",
+
         recommendation: Array.isArray(data.recommendations)
           ? data.recommendations.join(" | ")
-          : data.message || "No recommendations",
+          : data.message || data.advice || data.output || "No AI response",
       };
     } catch (err) {
       console.log("AI ERROR:", err.message);
