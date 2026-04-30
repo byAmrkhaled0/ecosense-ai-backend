@@ -58,13 +58,14 @@ exports.uploadData = async (req, res) => {
 
     // 🧠 AI FIRST (مهم جدًا)
     let aiAnalysis = {
-      status: "Safe",
+      status: "Unknown",
       recommendation: "No AI response",
     };
 
     try {
       const aiResponse = await axios.post(
-        "https://Amrkhaled2004.pythonanywhere.com/api/predict_with_image",
+        process.env.AI_API_URL ||
+          "https://Amrkhaled2004.pythonanywhere.com/api/predict_with_image",
         {
           cropType: sector.cropType,
           temperature: temp,
@@ -72,19 +73,21 @@ exports.uploadData = async (req, res) => {
           soilMoisture: Soil,
           light: light,
         },
-        { timeout: 4000 },
+        { timeout: 5000 },
       );
 
-      if (aiResponse.data) {
-        aiAnalysis = {
-          status: aiResponse.data.status || "Safe",
-          recommendation:
-            aiResponse.data.recommendations?.join(" | ") ||
-            "No recommendations",
-        };
-      }
+      console.log("AI RAW:", aiResponse.data);
+
+      const data = aiResponse.data;
+
+      aiAnalysis = {
+        status: data.status || data.prediction || data.result || "Unknown",
+        recommendation: Array.isArray(data.recommendations)
+          ? data.recommendations.join(" | ")
+          : data.message || "No recommendations",
+      };
     } catch (err) {
-      console.log("AI Error:", err.message);
+      console.log("AI ERROR:", err.message);
     }
 
     // 💾 SAVE FINAL (مرة واحدة فقط)
