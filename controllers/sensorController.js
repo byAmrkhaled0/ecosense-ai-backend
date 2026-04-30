@@ -37,20 +37,22 @@ const formatLightValue = (light) => {
    ============================================================ */
 exports.uploadData = async (req, res) => {
   try {
-    // تم إزالة soilTemp من هنا
-    const deviceSerial = req.body.deviceSerial;
-    const temp = Number(req.body.temp) || 0;
-    const hum = Number(req.body.hum) || 0;
-    const Soil = Number(req.body.Soil) || 0;
-    const light = req.body.light || "Medium";
+    // 1. استخراج البيانات مع التحويل لأرقام لضمان عدم حدوث Validation Error
+    // استخدمنا parseFloat عشان لو القيمة جاية String من الـ ESP تتحول لرقم صح
+    const { deviceSerial } = req.body;
+    const temp = parseFloat(req.body.temp) || 0;
+    const hum = parseFloat(req.body.hum) || 0;
+    const Soil = parseFloat(req.body.Soil) || 0;
+    const light = req.body.light || "Unknown";
 
+    // التأكد من وجود السيريال نمبر
     if (!deviceSerial) {
       return res
         .status(400)
         .json({ success: false, message: "deviceSerial مطلوب" });
     }
 
-    // 1. البحث عن الجهاز وعمل Populate للقطاع
+    // 2. البحث عن الجهاز وعمل Populate للقطاع
     const device = await Device.findOne({ deviceSerial }).populate("sectorId");
 
     if (!device || !device.sectorId) {
@@ -65,28 +67,26 @@ exports.uploadData = async (req, res) => {
     const finalSectorId = sector._id;
     const assignedWorkerId = sector.assignedWorker;
 
-    // 2. محاولة الاتصال بسيرفر الـ AI
+    // 3. محاولة الاتصال بسيرفر الـ AI (مع معالجة الأخطاء)
     let aiAnalysis = {
       status: "Unknown",
       recommendation: "سيرفر الـ AI غير متصل",
     };
 
     try {
+      // إرسال البيانات لسيرفر عمرو
       const aiResponse = await axios.post(
         process.env.AI_API_URL ||
           "https://Amrkhaled2004.pythonanywhere.com/api/mobile_predict",
         {
-          cropType: formatCropType(sector.cropType),
-          temperature: Number(temp),
-          humidity: Number(hum),
-          soilMoisture: Number(Soil),
-          soilTemp: 0, // نرسل قيمة صفرية طالما السنسور غير متاح تقنياً
-          light: formatLightValue(light),
+          cropType: sector.cropType,
+          temperature: temp,
+          humidity: hum,
+          soilMoisture: Soil,
+          soilTemp: 0,
+          light: light,
         },
-        {
-          headers: { "ngrok-skip-browser-warning": "true" },
-          timeout: 8000,
-        },
+        { timeout: 5000 }, // تقليل الـ timeout لسرعة الرد على الـ ESP
       );
 
       if (aiResponse.data) {
@@ -101,18 +101,18 @@ exports.uploadData = async (req, res) => {
       console.log("⚠️ AI Server unreachable:", aiErr.message);
     }
 
-    // 3. حفظ القراءة في الداتابيز
+    // 4. حفظ القراءة في الداتابيز (استخدام القيم اللي عملنا لها parseFloat)
     const newData = await SensorData.create({
       ownerId: finalOwnerId,
       sectorId: finalSectorId,
       deviceId: device._id,
       air: { temperature: temp, humidity: hum },
-      soil: { moisture: Soil, temperature: null }, // نضعها null لأنها غير متوفرة
+      soil: { moisture: Soil, temperature: null },
       light: String(light),
       analysis: aiAnalysis,
     });
 
-    // 4. تحديث حالة الجهاز (Online)
+    // 5. تحديث حالة الجهاز لـ Online
     await Device.findByIdAndUpdate(device._id, {
       status: "online",
       lastPing: Date.now(),

@@ -22,7 +22,7 @@ const swaggerSpec = require("./swagger");
 
 // 1️⃣ إنشاء تطبيق Express أولاً
 const app = express();
-
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // 2️⃣ إنشاء سيرفر HTTP وربطه بـ Express
