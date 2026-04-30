@@ -135,9 +135,11 @@ exports.uploadData = async (req, res) => {
             });
           }
         } catch (aiErr) {
-          console.log(
-            "⚠️ AI Server Timeout or Error - Keeping initial record.",
-          );
+          console.log("AI Error:", aiErr.message);
+          // تحديث السجل برسالة الخطأ عشان تعرف المشكلة فين من الـ Dashboard
+          await SensorData.findByIdAndUpdate(newData._id, {
+            "analysis.recommendation": "فشل التحليل: " + aiErr.message,
+          });
         }
 
         // ==========================================
