@@ -38,7 +38,11 @@ const formatLightValue = (light) => {
 exports.uploadData = async (req, res) => {
   try {
     // تم إزالة soilTemp من هنا
-    const { deviceSerial, temp, hum, Soil, light } = req.body;
+    const deviceSerial = req.body.deviceSerial;
+    const temp = Number(req.body.temp) || 0;
+    const hum = Number(req.body.hum) || 0;
+    const Soil = Number(req.body.Soil) || 0;
+    const light = req.body.light || "Medium";
 
     if (!deviceSerial) {
       return res
