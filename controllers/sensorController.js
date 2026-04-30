@@ -35,17 +35,19 @@ const formatLightValue = (light) => {
 /* ============================================================ 
    المسؤول عن استقبال بيانات الحساسات - مشروع EcoSense
    ============================================================ */
+const axios = require("axios"); // تأكد من استيراد axios في أعلى الملف
+
 exports.uploadData = async (req, res) => {
   try {
     const { deviceSerial } = req.body;
 
-    // 1. تأمين تحويل البيانات لأرقام لضمان عدم فشل الـ Validation
+    // 1. تحويل البيانات لأرقام لضمان سلامة العمليات الحسابية
     const temp = parseFloat(req.body.temp) || 0;
     const hum = parseFloat(req.body.hum) || 0;
     const Soil = parseFloat(req.body.Soil) || 0;
     const light = req.body.light || "Unknown";
 
-    // التحقق من السيريال نمبر
+    // التحقق من وجود السيريال نمبر
     if (!deviceSerial) {
       return res.status(400).json({
         success: false,
@@ -53,7 +55,7 @@ exports.uploadData = async (req, res) => {
       });
     }
 
-    // 2. البحث عن الجهاز والتأكد من ربطه بالقطاع
+    // 2. البحث عن الجهاز والقطاع المرتبط به
     const device = await Device.findOne({ deviceSerial }).populate("sectorId");
 
     if (!device || !device.sectorId) {
@@ -64,28 +66,46 @@ exports.uploadData = async (req, res) => {
     }
 
     const sector = device.sectorId;
+    const finalOwnerId = device.ownerId || sector.ownerId;
+    const assignedWorkerId = sector.assignedWorker;
 
-    // 🔥 الرد الفوري على الـ ESP32 لإنهاء الاتصال بنجاح وتجنب Error -1
+    // 🔥 الرد الفوري على الـ ESP32 لإنهاء الاتصال وتجنب الـ Timeout
     res.status(200).json({ success: true, message: "Accepted" });
 
-    // 🧠 تشغيل كل العمليات الثقيلة في الخلفية (Event Loop)
-    setImmediate(async () => {
+    // 🧠 تشغيل العمليات في الخلفية (Background Task)
+    (async () => {
       try {
-        const finalOwnerId = device.ownerId || sector.ownerId;
-        const finalSectorId = sector._id;
-        const assignedWorkerId = sector.assignedWorker;
+        // ==========================================
+        // 💾 الخطوة 1: حفظ بيانات الحساسات فوراً (بدون انتظار الـ AI)
+        // ==========================================
+        const newData = await SensorData.create({
+          ownerId: finalOwnerId,
+          sectorId: sector._id,
+          deviceId: device._id,
+          air: { temperature: temp, humidity: hum },
+          soil: { moisture: Soil },
+          light: String(light),
+          analysis: {
+            status: "Processing...",
+            recommendation: "جاري طلب التحليل من سيرفر الـ AI...",
+          },
+        });
 
-        // =========================
-        // 🤖 طلب تحليل الـ AI
-        // =========================
+        // تحديث حالة الجهاز (Ping)
+        await Device.findByIdAndUpdate(device._id, {
+          status: "online",
+          lastPing: Date.now(),
+        });
+
+        // ==========================================
+        // 🤖 الخطوة 2: طلب تحليل الـ AI (بشكل منفصل)
+        // ==========================================
         let aiAnalysis = {
           status: "Unknown",
-          recommendation: "سيرفر الـ AI غير متصل حالياً",
+          recommendation: "سيرفر الـ AI لم يستجب في الوقت المحدد",
         };
 
         try {
-          // جلب مكتبة axios داخل الـ Task لو مش معرفة global
-          const axios = require("axios");
           const aiResponse = await axios.post(
             process.env.AI_API_URL ||
               "https://Amrkhaled2004.pythonanywhere.com/api/mobile_predict",
@@ -99,46 +119,30 @@ exports.uploadData = async (req, res) => {
             },
             {
               headers: { "ngrok-skip-browser-warning": "true" },
-              timeout: 6000, // وقت انتظار كافٍ لسيرفر عمرو
+              timeout: 10000, // مهلة 10 ثوانٍ لسيرفر عمرو
             },
           );
 
           if (aiResponse.data) {
             aiAnalysis = {
-              status: aiResponse.data.status || "Unknown",
+              status: aiResponse.data.status || "Safe",
               recommendation: aiResponse.data.recommendations
                 ? aiResponse.data.recommendations.join(" | ")
                 : "لا توجد توصيات حالية",
             };
+
+            // تحديث سجل البيانات اللي سيفناه بنتيجة الـ AI الجديدة
+            await SensorData.findByIdAndUpdate(newData._id, {
+              analysis: aiAnalysis,
+            });
           }
-        } catch (err) {
-          console.log("⚠️ AI Analysis Background Error:", err.message);
+        } catch (aiErr) {
+          console.log("⚠️ AI Server Error/Timeout, keeping initial record.");
         }
 
-        // =========================
-        // 💾 حفظ بيانات الحساسات والتحليل
-        // =========================
-        const newData = await SensorData.create({
-          ownerId: finalOwnerId,
-          sectorId: finalSectorId,
-          deviceId: device._id,
-          air: { temperature: temp, humidity: hum },
-          soil: { moisture: Soil, temperature: null },
-          light: String(light),
-          analysis: aiAnalysis,
-        });
-
-        // =========================
-        // 📡 تحديث حالة الجهاز (Ping)
-        // =========================
-        await Device.findByIdAndUpdate(device._id, {
-          status: "online",
-          lastPing: Date.now(),
-        });
-
-        // =========================
-        // 🚨 نظام التنبيهات الذكي
-        // =========================
+        // ==========================================
+        // 🚨 الخطوة 3: نظام التنبيهات (Notification)
+        // ==========================================
         const criticalStatuses = [
           "High Stress",
           "Danger",
@@ -155,7 +159,7 @@ exports.uploadData = async (req, res) => {
           const socketPayload = {
             title: "🚨 تنبيه خطر فوري",
             message: `القطاع: ${sector.name} | الحالة: ${aiAnalysis.status} | حرارة: ${temp}°C`,
-            sectorId: finalSectorId,
+            sectorId: sector._id,
             createdAt: new Date(),
           };
 
@@ -164,11 +168,10 @@ exports.uploadData = async (req, res) => {
             _id: { $in: [finalOwnerId, assignedWorkerId].filter(Boolean) },
           }).select("fcmToken");
 
-          // 🔔 إرسال Firebase Push
+          // إرسال Firebase Push Notifications
           for (const user of usersToNotify) {
             if (user.fcmToken) {
               try {
-                const axios = require("axios");
                 await axios.post(
                   "https://fcm.googleapis.com/fcm/send",
                   {
@@ -187,13 +190,13 @@ exports.uploadData = async (req, res) => {
                     },
                   },
                 );
-              } catch (err) {
-                console.log("Firebase Background Error:", err.message);
+              } catch (fcmErr) {
+                console.log("Firebase Error:", fcmErr.message);
               }
             }
           }
 
-          // ⚡ تحديث الـ Dashboard عبر Socket.io
+          // تحديث الـ Dashboard عبر Socket.io
           if (io) {
             if (finalOwnerId)
               io.to(finalOwnerId.toString()).emit(
@@ -207,36 +210,33 @@ exports.uploadData = async (req, res) => {
               );
           }
 
-          // 💾 أرشفة التنبيه في الهيستوري
+          // أرشفة التنبيه
           const notificationsToSave = [
             {
               recipient: finalOwnerId,
-              sectorId: finalSectorId,
+              sectorId: sector._id,
               title: socketPayload.title,
               message: socketPayload.message,
               type: "warning",
             },
           ];
-
           if (assignedWorkerId) {
             notificationsToSave.push({
               recipient: assignedWorkerId,
-              sectorId: finalSectorId,
+              sectorId: sector._id,
               title: socketPayload.title,
               message: socketPayload.message,
               type: "warning",
             });
           }
-
           await Notification.insertMany(notificationsToSave);
         }
       } catch (bgErr) {
-        console.log("❌ Critical Background Task Error:", bgErr.message);
+        console.error("❌ Background Task Error:", bgErr.message);
       }
-    });
+    })();
   } catch (err) {
-    console.error("❌ Controller General Error:", err.message);
-    // نرد بـ 500 فقط لو الرد متبعتش (res.status(200) متنفذتش)
+    console.error("❌ Controller Error:", err.message);
     if (!res.headersSent) {
       res.status(500).json({ success: false, error: err.message });
     }
