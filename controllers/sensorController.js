@@ -79,20 +79,38 @@ exports.uploadData = async (req, res) => {
           humidity: hum,
           soilMoisture: Soil,
           light: light,
+          // لو فيه صورة مبعوتة بتضيفها هنا
         },
         {
           headers: { "ngrok-skip-browser-warning": "true" },
-          timeout: 7000, // مهلة 7 ثواني عشان نضمن الرد
+          timeout: 8000,
         },
       );
 
       if (aiResponse.data) {
-        let aiAnalysis = {
-          status: aiResponse.data.status || "Safe",
-          recommendation:
-            aiResponse.data.recommendations?.join(" | ") ||
-            "لا توجد توصيات حالية",
+        const data = aiResponse.data;
+
+        aiAnalysis = {
+          // بناخد الحالة النهائية اللي الـ AI قررها بعد طبقة الحماية
+          status: data.final_status || data.status || "Safe",
+
+          // بنجمع التوصيات العامة وتوصيات الصورة في نص واحد
+          recommendation: data.recommendations
+            ? data.recommendations.join(" | ")
+            : data.general_recommendation || "لا توجد توصيات",
+
+          // إضافة اختيارية: لو عايز تخزن التشخيص البصري بالتحديد
+          visualDiagnosis: data.diagnosis
+            ? data.diagnosis.visual_problem_ar
+            : null,
         };
+
+        // تحديث السجل في قاعدة البيانات
+        await SensorData.findByIdAndUpdate(newData._id, {
+          analysis: aiAnalysis,
+          // لو حابب تخزن الـ JSON كامل للرجوع ليه مستقبلاً
+          aiRawResponse: data,
+        });
       }
     } catch (aiErr) {
       console.log("⚠️ AI Error: " + aiErr.message);
