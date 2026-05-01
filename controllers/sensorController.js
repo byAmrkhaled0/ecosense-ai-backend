@@ -35,8 +35,13 @@ const formatLightValue = (light) => {
 /* ============================================================ 
    المسؤول عن استقبال بيانات الحساسات - مشروع EcoSense
    ============================================================ */
-
 exports.uploadData = async (req, res) => {
+  // 1. تعريف المتغير في بداية الدالة لضمان وصول كل الأجزاء ليه
+  let aiAnalysis = {
+    status: "Safe",
+    recommendation: "جاري انتظار رد سيرفر الـ AI...",
+  };
+
   try {
     const { deviceSerial } = req.body;
     const temp = parseFloat(req.body.temp) || 0;
@@ -44,32 +49,28 @@ exports.uploadData = async (req, res) => {
     const Soil = parseFloat(req.body.Soil) || 0;
     const light = req.body.light || "Unknown";
 
-    // 1. التحقق من البيانات الأساسية
-    if (!deviceSerial) {
+    if (!deviceSerial)
       return res
         .status(400)
         .json({ success: false, message: "deviceSerial مطلوب" });
-    }
 
     const device = await Device.findOne({ deviceSerial }).populate("sectorId");
-    if (!device || !device.sectorId) {
+    if (!device || !device.sectorId)
       return res
         .status(404)
-        .json({ success: false, message: "الجهاز غير مربوط بقطاع" });
-    }
+        .json({ success: false, message: "الجهاز غير مربوط" });
 
     const sector = device.sectorId;
     const finalOwnerId = device.ownerId || sector.ownerId;
     const assignedWorkerId = sector.assignedWorker;
 
-    // تحديث حالة الجهاز (Ping)
+    // تحديث حالة الجهاز
     await Device.findByIdAndUpdate(device._id, {
       status: "online",
       lastPing: Date.now(),
     });
 
-    // 2. طلب تحليل الـ AI أولاً (قبل التخزين)
-
+    // 2. طلب الـ AI (باستخدام اللينك الجديد والرد التفصيلي)
     try {
       const aiResponse = await axios.post(
         "https://Amrkhaled2004.pythonanywhere.com/api/predict_with_image",
@@ -79,7 +80,6 @@ exports.uploadData = async (req, res) => {
           humidity: hum,
           soilMoisture: Soil,
           light: light,
-          // لو فيه صورة مبعوتة بتضيفها هنا
         },
         {
           headers: { "ngrok-skip-browser-warning": "true" },
@@ -89,36 +89,20 @@ exports.uploadData = async (req, res) => {
 
       if (aiResponse.data) {
         const data = aiResponse.data;
-
         aiAnalysis = {
-          // بناخد الحالة النهائية اللي الـ AI قررها بعد طبقة الحماية
           status: data.final_status || data.status || "Safe",
-
-          // بنجمع التوصيات العامة وتوصيات الصورة في نص واحد
           recommendation: data.recommendations
             ? data.recommendations.join(" | ")
-            : data.general_recommendation || "لا توجد توصيات",
-
-          // إضافة اختيارية: لو عايز تخزن التشخيص البصري بالتحديد
-          visualDiagnosis: data.diagnosis
-            ? data.diagnosis.visual_problem_ar
-            : null,
+            : data.summary || "لا توجد توصيات",
         };
-
-        // تحديث السجل في قاعدة البيانات
-        await SensorData.findByIdAndUpdate(newData._id, {
-          analysis: aiAnalysis,
-          // لو حابب تخزن الـ JSON كامل للرجوع ليه مستقبلاً
-          aiRawResponse: data,
-        });
       }
     } catch (aiErr) {
-      console.log("⚠️ AI Error: " + aiErr.message);
-      // في حالة الفشل، سيتم استخدام القيم الافتراضية لـ aiAnalysis المحددة فوق
+      console.log("⚠️ AI Server Error: " + aiErr.message);
+      aiAnalysis.recommendation =
+        "تعذر الاتصال بسيرفر الـ AI، تم استخدام التقييم التلقائي.";
     }
 
-    // 3. تخزين الداتا النهائية (بعد ما معانا نتيجة الـ AI)
-    // كده السجل هينزل بـ updatedAt و createdAt مطابقين ومعاهم النتيجة فوراً
+    // 3. الآن يتم إنشاء السجل مرة واحدة فقط بالبيانات النهائية
     const newData = await SensorData.create({
       ownerId: finalOwnerId,
       sectorId: sector._id,
@@ -126,10 +110,10 @@ exports.uploadData = async (req, res) => {
       air: { temperature: temp, humidity: hum },
       soil: { moisture: Soil },
       light: String(light),
-      analysis: aiAnalysis, // النتيجة جاهزة هنا
+      analysis: aiAnalysis,
     });
 
-    // 4. الرد على الجهاز (Accepted)
+    // 4. الرد على الجهاز
     res
       .status(200)
       .json({ success: true, message: "Accepted", dataId: newData._id });
