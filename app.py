@@ -796,15 +796,14 @@ def build_advanced_response(data, status, confidence, image_result=None):
         safety_flags=safety_flags
     )
 
-    response = {"status": final_status,
+    response = {
+        "status": final_status,
         "sensor_status": status,
         "image_status": image_status,
         "final_status": final_status,
-        # اسم الزرعة راجع في السينسورات والكاميرا
         "cropType": crop_type,
         "cropName": crop_type,
         "plant_name": crop_type,
-
         "confidence": confidence,
         "alert": alert_info["alert"],
         "severity": alert_info["severity"],
@@ -816,14 +815,14 @@ def build_advanced_response(data, status, confidence, image_result=None):
         "actions": actions,
         "monitoring": monitoring,
         "backend_flags": backend_flags,
-       "safety_layer": {
-        "applied": len(safety_flags) > 0,
-        "flags": safety_flags,
-        "sensor_model_status": status,
-        "image_status": image_status,
-        "combined_status_before_safety": initial_final_status,
-        "status_after_safety": final_status
-    },
+        "safety_layer": {
+            "applied": len(safety_flags) > 0,
+            "flags": safety_flags,
+            "sensor_model_status": status,
+            "image_status": image_status,
+            "combined_status_before_safety": initial_final_status,
+            "status_after_safety": final_status
+        },
         "notification": notification,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
@@ -856,12 +855,9 @@ def build_image_only_response(image_result, crop_type="Unknown"):
     return {
         "status": status,
         "final_status": image_stress,
-
-        # اسم الزرعة راجع في الكاميرا
         "cropType": crop_type,
         "cropName": crop_type,
         "plant_name": crop_type,
-
         "disease_name": disease_name,
         "disease_name_ar": visual_problem_ar,
         "confidence": confidence,
@@ -882,13 +878,11 @@ def home():
     return jsonify({
         "message": "Smart Plant Health API V2 is running ✅",
         "version": "2.0",
-        "features": [
-            "sensor prediction",
-            "image analysis",
-            "sensor + image fusion",
-            "safety override layer",
-            "visual disease suspicion"
-        ]
+        "endpoints": {
+            "sensors_only": "POST /api/predict_sensors  → JSON body",
+            "image_only":   "POST /api/predict_image    → form-data (file + cropType)",
+            "combined":     "POST /api/predict_with_image → form-data (file + sensors)",
+        }
     }), 200
 
 
@@ -901,116 +895,163 @@ def api_health():
     }), 200
 
 
-@app.route("/api/simple_predict", methods=["POST"])
-def simple_predict():
-    try:
-        if not request.is_json:
-            return jsonify({
-                "error": "For /api/simple_predict use raw JSON body with Content-Type: application/json"
-            }), 400
-
-        data = request.get_json(silent=True) or {}
-        missing = validate_common_fields(data)
-        if missing:
-            return jsonify({
-                "error": "Missing required fields",
-                "missing": missing
-            }), 400
-
-        data = normalize_sensor_data(data)
-        status, confidence = predict_sensor_status(data)
-
-        response_data = build_advanced_response(
-            data=data,
-            status=status,
-            confidence=confidence
-        )
-
-        save_prediction({
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "request_type": "simple_predict",
-            "input": data,
-            "result": response_data
-        })
-
-        return jsonify(response_data), 200
-
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/mobile_predict", methods=["POST"])
-def mobile_predict():
-    try:
-        if not request.is_json:
-            return jsonify({
-                "error": "Use JSON body"
-            }), 400
-
-        data = request.get_json(silent=True) or {}
-        missing = validate_common_fields(data)
-        if missing:
-            return jsonify({
-                "error": "Missing required fields",
-                "missing": missing
-            }), 400
-
-        data = normalize_sensor_data(data)
-        status, confidence = predict_sensor_status(data)
-
-        response_data = build_advanced_response(
-            data=data,
-            status=status,
-            confidence=confidence
-        )
-
-        save_prediction({
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "request_type": "mobile_predict",
-            "input": data,
-            "result": response_data
-        })
-
-        return jsonify(response_data), 200
-
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/predict_with_image", methods=["POST"])
-def predict_with_image():
+# =========================
+# 1) Sensors-Only Endpoint
+# بيتبعت كل 30 دقيقة من السينسورات
+# Content-Type: application/json
+# =========================
+@app.route("/api/predict_sensors", methods=["POST"])
+def predict_sensors():
     """
-    V2 supports two modes:
+    Sensors-only prediction.
+    Request: JSON body
+    {
+        "cropType":     "Tomato",
+        "temperature":  25,
+        "humidity":     60,
+        "soilMoisture": 45,
+        "soilTemp":     24,
+        "light":        "Sufficient"
+    }
+    Response fields:
+        final_status, sensor_status, severity, alert,
+        diagnosis, risk_factors, recommendations,
+        actions, monitoring, backend_flags,
+        confidence, safety_layer, notification, timestamp
+    """
+    try:
+        if not request.is_json:
+            return jsonify({
+                "error": "Use Content-Type: application/json with a raw JSON body."
+            }), 400
 
-    1) Image only:
-       form-data:
-       - file
-       - cropType optional
+        data = request.get_json(silent=True) or {}
+        missing = validate_common_fields(data)
+        if missing:
+            return jsonify({
+                "error": "Missing required fields",
+                "missing": missing
+            }), 400
 
-    2) Image + sensors:
-       form-data:
-       - file
-       - cropType
-       - temperature
-       - humidity
-       - soilMoisture
-       - soilTemp
-       - light
+        data = normalize_sensor_data(data)
+        status, confidence = predict_sensor_status(data)
+
+        response_data = build_advanced_response(
+            data=data,
+            status=status,
+            confidence=confidence
+            # no image_result → image_status will be "Not used"
+        )
+
+        # Tag the source so history is searchable
+        response_data["source"] = "sensors"
+
+        save_prediction({
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "request_type": "predict_sensors",
+            "input": data,
+            "result": response_data
+        })
+
+        return jsonify(response_data), 200
+
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# =========================
+# 2) Image-Only Endpoint
+# بيتبعت عند الطلب من الكاميرا
+# Content-Type: multipart/form-data
+# =========================
+@app.route("/api/predict_image", methods=["POST"])
+def predict_image():
+    """
+    Image-only prediction (no sensor data needed).
+    Request: form-data
+        file      → plant image (required)
+        cropType  → e.g. "Tomato"  (optional, default "Unknown")
+
+    Response fields:
+        final_status, status, image_stress,
+        disease_name, disease_name_ar,
+        health_score, severity_score, confidence,
+        summary, recommendations,
+        visual_flags, image_analysis, timestamp
     """
     try:
         if "file" not in request.files:
             return jsonify({
-                "error": "For /api/predict_with_image use Body -> form-data with file field named 'file'"
+                "error": "Send the image as form-data with key 'file'."
             }), 400
 
         image_file = request.files["file"]
 
         if image_file is None or image_file.filename.strip() == "":
-            return jsonify({"error": "No image selected"}), 400
+            return jsonify({"error": "No image selected."}), 400
+
+        crop_type = (
+            request.form.get("cropType")
+            or request.form.get("cropName")
+            or request.form.get("plantName")
+            or request.form.get("plant_name")
+            or "Unknown"
+        ).strip()
+
+        image_result = analyze_plant_image(image_file)
+
+        if "error" in image_result:
+            return jsonify({"error": image_result["error"]}), 400
+
+        response_data = build_image_only_response(image_result, crop_type)
+        response_data["source"] = "image"
+
+        save_prediction({
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "request_type": "predict_image",
+            "image_filename": image_file.filename,
+            "input": {"cropType": crop_type, "mode": "image_only"},
+            "image_analysis": image_result,
+            "result": response_data
+        })
+
+        return jsonify(response_data), 200
+
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# =========================
+# 3) Combined Endpoint (sensors + image)
+# الأساسي لما الاتنين متاحين
+# Content-Type: multipart/form-data
+# =========================
+@app.route("/api/predict_with_image", methods=["POST"])
+def predict_with_image():
+    """
+    Combined prediction: image + optional sensor data.
+
+    Mode A — image + sensors (full fusion):
+        form-data: file, cropType, temperature, humidity,
+                   soilMoisture, soilTemp, light
+
+    Mode B — image only (no sensor fields):
+        form-data: file, cropType (optional)
+    """
+    try:
+        if "file" not in request.files:
+            return jsonify({
+                "error": "Send the image as form-data with key 'file'."
+            }), 400
+
+        image_file = request.files["file"]
+
+        if image_file is None or image_file.filename.strip() == "":
+            return jsonify({"error": "No image selected."}), 400
 
         form_data = request.form.to_dict()
 
@@ -1027,17 +1068,16 @@ def predict_with_image():
         if "error" in image_result:
             return jsonify({"error": image_result["error"]}), 400
 
-        # If all sensor fields exist, fuse image + sensors
         if has_all_sensor_fields(form_data):
+            # Mode A: full fusion
             data = {
-                "cropType": crop_type,
-                "temperature": form_data.get("temperature"),
-                "humidity": form_data.get("humidity"),
+                "cropType":     crop_type,
+                "temperature":  form_data.get("temperature"),
+                "humidity":     form_data.get("humidity"),
                 "soilMoisture": form_data.get("soilMoisture"),
-                "soilTemp": form_data.get("soilTemp"),
-                "light": form_data.get("light")
+                "soilTemp":     form_data.get("soilTemp"),
+                "light":        form_data.get("light")
             }
-
             data = normalize_sensor_data(data)
             status, confidence = predict_sensor_status(data)
 
@@ -1047,17 +1087,16 @@ def predict_with_image():
                 confidence=confidence,
                 image_result=image_result
             )
-
+            response_data["source"] = "sensors+image"
             request_type = "predict_with_image_and_sensors"
             saved_input = data
 
         else:
+            # Mode B: image only (fallback inside this endpoint)
             response_data = build_image_only_response(image_result, crop_type)
+            response_data["source"] = "image"
             request_type = "predict_with_image"
-            saved_input = {
-                "cropType": crop_type,
-                "mode": "image_only"
-            }
+            saved_input = {"cropType": crop_type, "mode": "image_only"}
 
         save_prediction({
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1076,21 +1115,38 @@ def predict_with_image():
         return jsonify({"error": str(e)}), 500
 
 
+# =========================
+# Legacy aliases (backward compat)
+# =========================
+@app.route("/api/simple_predict", methods=["POST"])
+def simple_predict():
+    """Legacy — same as /api/predict_sensors but kept for old clients."""
+    return predict_sensors()
+
+
+@app.route("/api/mobile_predict", methods=["POST"])
+def mobile_predict():
+    """Legacy — same as /api/predict_sensors but kept for old clients."""
+    return predict_sensors()
+
+
 @app.route("/api/image_predict", methods=["POST"])
 def image_predict_alias():
-    return predict_with_image()
+    """Legacy alias for /api/predict_image."""
+    return predict_image()
 
 
+# =========================
+# History
+# =========================
 @app.route("/api/history", methods=["GET"])
 def get_history():
     try:
         history = load_history()
-
         return jsonify({
             "count": len(history),
             "history": history
         }), 200
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

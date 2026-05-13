@@ -255,3 +255,4 @@ def analyze_plant_image(image_file):
 
     except Exception as e:
         return {"error": str(e)}
+
