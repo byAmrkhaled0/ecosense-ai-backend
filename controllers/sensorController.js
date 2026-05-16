@@ -1,19 +1,16 @@
+const mongoose = require("mongoose");
+const axios = require("axios");
+
+// استدعاء الموديلات مرة واحدة وبشكل صحيح
 const SensorData = require("../models/SensorData");
 const Device = require("../models/Device");
 const Sector = require("../models/Sector");
 const Notification = require("../models/Notification");
-const axios = require("axios");
-const mongoose = require("mongoose");
 const User = require("../models/User");
 
 /* ============================================================
    HELPERS (التنسيق لمتطلبات الـ AI)
    ============================================================ */
-const axios = require("axios");
-const Device = require("../models/Device");
-const SensorData = require("../models/SensorData");
-const User = require("../models/User");
-const Notification = require("../models/Notification");
 
 // 🛠️ دالة مساعدة لتنظيف وتوحيد أسماء المحاصيل قبل إرسالها للـ AI
 const formatCropType = (crop) => {
@@ -279,8 +276,9 @@ exports.analyzeLastReading = async (req, res) => {
     }
   }
 };
+
 /* ============================================================
-2️⃣ GET LATEST READING (آخر قراءة محدثة للـ Dashboard)
+3️⃣ GET LATEST READING (آخر قراءة محدثة للـ Dashboard)
 ============================================================ */
 exports.getLatest = async (req, res) => {
   try {
@@ -329,7 +327,7 @@ exports.getLatest = async (req, res) => {
 };
 
 /* ============================================================
-3️⃣ GET HISTORY (سجل البيانات مع الفلترة)
+4️⃣ GET HISTORY (سجل البيانات مع الفلترة)
 ============================================================ */
 exports.getHistory = async (req, res) => {
   try {
@@ -392,7 +390,7 @@ exports.getHistory = async (req, res) => {
 };
 
 /* ============================================================
-4️⃣ GET ANALYTICS (تحليلات الأداء اليومي)
+5️⃣ GET ANALYTICS (تحليلات الأداء اليومي)
 ============================================================ */
 exports.getAnalytics = async (req, res) => {
   try {
