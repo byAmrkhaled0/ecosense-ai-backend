@@ -14,7 +14,7 @@ exports.processSensorData = async (sensorId, io) => {
 
     const sector = sensor.sectorId;
 
-    // AI Analysis
+    // ================= AI ANALYSIS =================
     const aiAnalysis = await getAIAnalysis({
       cropType: sector.cropType,
 
@@ -27,21 +27,25 @@ exports.processSensorData = async (sensorId, io) => {
       light: sensor.light,
     });
 
-    // Update Sensor Data
+    // ================= SAVE =================
     sensor.analysis = aiAnalysis;
 
     await sensor.save();
 
-    console.log("✅ AI Analysis Saved");
+    console.log("✅ AI Analysis Saved:", aiAnalysis.status);
 
-    // Critical Check
+    // ================= CRITICAL LOGIC (UPDATED) =================
     const isCritical =
-      aiAnalysis.status === "Critical" ||
-      aiAnalysis.status === "Danger" ||
+      aiAnalysis.alert === true ||
+      aiAnalysis.severity === "high" ||
+      aiAnalysis.status === "High Stress" ||
+      aiAnalysis.status === "Moderate Stress" ||
       sensor.air.temperature > 45 ||
       sensor.soil.moisture < 10;
 
     if (isCritical) {
+      console.log("🚨 CRITICAL DETECTED");
+
       await sendCriticalAlert({
         io,
 
@@ -56,6 +60,18 @@ exports.processSensorData = async (sensorId, io) => {
         status: aiAnalysis.status,
 
         temperature: sensor.air.temperature,
+
+        severity: aiAnalysis.severity,
+
+        riskFactors: aiAnalysis.riskFactors,
+      });
+    }
+
+    // ================= REALTIME UPDATE (OPTIONAL BUT IMPORTANT) =================
+    if (io && sensor.ownerId) {
+      io.to(sensor.ownerId.toString()).emit("sensorUpdated", {
+        sensorId: sensor._id,
+        analysis: aiAnalysis,
       });
     }
 
