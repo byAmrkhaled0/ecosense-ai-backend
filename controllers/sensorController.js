@@ -144,6 +144,7 @@ exports.analyzeLastReading = async (req, res) => {
           temperature: Number(lastReading.air.temperature),
           humidity: Number(lastReading.air.humidity),
           soilMoisture: Number(lastReading.soil.moisture),
+          soilTemp: Number(lastReading.air.temperature) - 2,
           light: formattedLight, // تأكد إذا كان السيرفر يتوقعها نصية أو حقل رقمي
         },
         {
