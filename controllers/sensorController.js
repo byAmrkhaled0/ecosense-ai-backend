@@ -129,33 +129,57 @@ exports.analyzeLastReading = async (req, res) => {
     };
 
     try {
-      // تطبيق دالات التنظيف والـ Formatting هنا قبل الإرسال لسيرفر Hugging Face
+      // تطبيق دالات التنظيف والـ Formatting للـ JSON بـقيمة متوافقة مع الموديل
       const formattedCrop = formatCropType(sector.cropType);
       const formattedLight = formatLightValue(lastReading.light);
+
+      console.log(
+        `📡 Sending to AI -> Crop: ${formattedCrop}, Light: ${formattedLight}`,
+      );
 
       const aiResponse = await axios.post(
         "https://amr2004-ecosense-ai.hf.space/api/predict_sensors",
         {
           cropType: formattedCrop,
-          temperature: lastReading.air.temperature,
-          humidity: lastReading.air.humidity,
-          soilMoisture: lastReading.soil.moisture,
-          light: formattedLight,
+          temperature: Number(lastReading.air.temperature),
+          humidity: Number(lastReading.air.humidity),
+          soilMoisture: Number(lastReading.soil.moisture),
+          light: formattedLight, // تأكد إذا كان السيرفر يتوقعها نصية أو حقل رقمي
         },
-        { headers: { "ngrok-skip-browser-warning": "true" }, timeout: 8000 },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "ngrok-skip-browser-warning": "true",
+          },
+          timeout: 10000, // رفعنا الـ timeout لـ 10 ثواني لضمان الرد
+        },
       );
 
       if (aiResponse.data) {
         const data = aiResponse.data;
+        console.log("✅ AI Response Data:", data);
+
+        // معالجة مرنة للتوصيات لو رجعت Array أو نص عادي
+        let recs = "لا توجد توصيات حالياً";
+        if (data.recommendations) {
+          recs = Array.isArray(data.recommendations)
+            ? data.recommendations.join(" | ")
+            : data.recommendations;
+        } else if (data.summary) {
+          recs = data.summary;
+        }
+
         aiAnalysis = {
           status: data.final_status || data.status || "Safe",
-          recommendation: data.recommendations
-            ? data.recommendations.join(" | ")
-            : data.summary || "لا توجد توصيات",
+          recommendation: recs,
         };
       }
     } catch (aiErr) {
-      console.log("⚠️ AI Server Error: " + aiErr.message);
+      // طباعة تفاصيل الخطأ كاملة في الـ Console عندك عشان تعرف سيرفر الـ AI زعلان من إيه بالظبط
+      console.error(
+        "⚠️ AI Server Error Details:",
+        aiErr.response ? aiErr.response.data : aiErr.message,
+      );
       aiAnalysis.recommendation =
         "تعذر الاتصال بسيرفر الـ AI، تم استخدام التقييم التلقائي المحدود.";
     }
@@ -169,7 +193,7 @@ exports.analyzeLastReading = async (req, res) => {
       .status(200)
       .json({ success: true, message: "Analysis updated", data: lastReading });
 
-    // 5. نظام التنبيهات الفورية والإشعارات (يعمل في الخلفية تلافياً لتعطيل الرد)
+    // 5. نظام التنبيهات الفورية والإشعارات في الخلفية
     (async () => {
       try {
         const currentStatus = aiAnalysis.status;
@@ -180,7 +204,6 @@ exports.analyzeLastReading = async (req, res) => {
           "Warning",
         ];
 
-        // التحقق من وجود تخطي للحدود المسموحة (الحرارة > 45 أو رطوبة التربة < 10% أو حالة حرجة من الـ AI)
         const isCritical =
           lastReading.air.temperature > 45 ||
           lastReading.soil.moisture < 10 ||
@@ -195,7 +218,6 @@ exports.analyzeLastReading = async (req, res) => {
             createdAt: new Date(),
           };
 
-          // بث الحدث عبر الـ WebSockets (Socket.io) لايف للويب والموبايل
           if (io) {
             if (finalOwnerId)
               io.to(finalOwnerId.toString()).emit(
@@ -209,7 +231,6 @@ exports.analyzeLastReading = async (req, res) => {
               );
           }
 
-          // جلب رموز الـ FCM Tokens لإرسال الـ Push Notifications لهواتف المالك والعامل معاً
           const usersToNotify = await User.find({
             _id: { $in: [finalOwnerId, assignedWorkerId].filter(Boolean) },
           }).select("fcmToken");
@@ -218,7 +239,7 @@ exports.analyzeLastReading = async (req, res) => {
             if (user.fcmToken) {
               try {
                 await axios.post(
-                  "https://amr2004-ecosense-ai.hf.space/api/predict_sensors",
+                  "https://fcm.googleapis.com/fcm/send",
                   {
                     to: user.fcmToken,
                     notification: {
@@ -242,7 +263,6 @@ exports.analyzeLastReading = async (req, res) => {
             }
           }
 
-          // حفظ التنبيه بشكل رسمي في جدول الإشعارات داخل قاعدة البيانات للرجوع إليه لاحقاً
           const notificationsToSave = [
             {
               recipient: finalOwnerId,
