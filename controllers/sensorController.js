@@ -101,9 +101,13 @@ exports.uploadData = async (req, res) => {
     });
 
     // Background Processing
-    process.nextTick(() => {
-      processSensorData(savedData._id, req.app.get("io"));
-    });
+    const baseURL = "https://ecosense-backend.vercel.app";
+
+    axios
+      .post(`${baseURL}/api/sensors/process-sensor/${savedData._id}`)
+      .catch((err) => {
+        console.log(err.message);
+      });
   } catch (err) {
     console.error(err);
 
