@@ -218,7 +218,7 @@ exports.analyzeLastReading = async (req, res) => {
             if (user.fcmToken) {
               try {
                 await axios.post(
-                  "https://fcm.googleapis.com/fcm/send",
+                  " https://amr2004-ecosense-ai.hf.space/api/predict_sensors",
                   {
                     to: user.fcmToken,
                     notification: {
