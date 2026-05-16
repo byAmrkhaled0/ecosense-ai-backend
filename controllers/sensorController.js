@@ -5,6 +5,7 @@ const Notification = require("../models/Notification");
 const axios = require("axios");
 const mongoose = require("mongoose");
 const User = require("../models/User");
+const { processSensorData } = require("../services/sensor.processor");
 
 /* ============================================================
    HELPERS (التنسيق لمتطلبات الـ AI)
@@ -36,183 +37,81 @@ const formatLightValue = (light) => {
    المسؤول عن استقبال بيانات الحساسات - مشروع EcoSense
    ============================================================ */
 exports.uploadData = async (req, res) => {
-  // 1. تعريف المتغير في بداية الدالة لضمان وصول كل الأجزاء ليه
-  let aiAnalysis = {
-    status: "Safe",
-    recommendation: "جاري انتظار رد سيرفر الـ AI...",
-  };
-
   try {
     const { deviceSerial } = req.body;
-    const temp = parseFloat(req.body.temp) || 0;
-    const hum = parseFloat(req.body.hum) || 0;
-    const Soil = parseFloat(req.body.Soil) || 0;
+
+    const temp = Number(req.body.temp) || 0;
+    const hum = Number(req.body.hum) || 0;
+    const Soil = Number(req.body.Soil) || 0;
     const light = req.body.light || "Unknown";
 
-    if (!deviceSerial)
-      return res
-        .status(400)
-        .json({ success: false, message: "deviceSerial مطلوب" });
+    if (!deviceSerial) {
+      return res.status(400).json({
+        success: false,
+        message: "deviceSerial مطلوب",
+      });
+    }
 
-    const device = await Device.findOne({ deviceSerial }).populate("sectorId");
-    if (!device || !device.sectorId)
-      return res
-        .status(404)
-        .json({ success: false, message: "الجهاز غير مربوط" });
+    const device = await Device.findOne({
+      deviceSerial,
+    }).populate("sectorId");
 
-    const sector = device.sectorId;
-    const finalOwnerId = device.ownerId || sector.ownerId;
-    const assignedWorkerId = sector.assignedWorker;
+    if (!device || !device.sectorId) {
+      return res.status(404).json({
+        success: false,
+        message: "الجهاز غير مربوط",
+      });
+    }
 
-    // تحديث حالة الجهاز
+    // Update Device Status
     await Device.findByIdAndUpdate(device._id, {
       status: "online",
       lastPing: Date.now(),
     });
 
-    // 2. طلب الـ AI (باستخدام اللينك الجديد والرد التفصيلي)
-    try {
-      const aiResponse = await axios.post(
-        "https://Amrkhaled2004.pythonanywhere.com/api/predict_with_image",
-        {
-          cropType: sector.cropType,
-          temperature: temp,
-          humidity: hum,
-          soilMoisture: Soil,
-          light: light,
-        },
-        {
-          headers: { "ngrok-skip-browser-warning": "true" },
-          timeout: 8000,
-        },
-      );
+    // Save سريع
+    const savedData = await SensorData.create({
+      ownerId: device.ownerId || device.sectorId.ownerId,
 
-      if (aiResponse.data) {
-        const data = aiResponse.data;
-        aiAnalysis = {
-          status: data.final_status || data.status || "Safe",
-          recommendation: data.recommendations
-            ? data.recommendations.join(" | ")
-            : data.summary || "لا توجد توصيات",
-        };
-      }
-    } catch (aiErr) {
-      console.log("⚠️ AI Server Error: " + aiErr.message);
-      aiAnalysis.recommendation =
-        "تعذر الاتصال بسيرفر الـ AI، تم استخدام التقييم التلقائي.";
-    }
+      sectorId: device.sectorId._id,
 
-    // 3. الآن يتم إنشاء السجل مرة واحدة فقط بالبيانات النهائية
-    const newData = await SensorData.create({
-      ownerId: finalOwnerId,
-      sectorId: sector._id,
       deviceId: device._id,
-      air: { temperature: temp, humidity: hum },
-      soil: { moisture: Soil },
+
+      air: {
+        temperature: temp,
+        humidity: hum,
+      },
+
+      soil: {
+        moisture: Soil,
+      },
+
       light: String(light),
-      analysis: aiAnalysis,
+
+      analysis: {
+        status: "Pending",
+        recommendation: "AI Processing...",
+      },
     });
 
-    // 4. الرد على الجهاز
-    res
-      .status(200)
-      .json({ success: true, message: "Accepted", dataId: newData._id });
+    // رد سريع للهاردوير
+    res.status(200).json({
+      success: true,
+      message: "Data Received",
+    });
 
-    // 5. نظام التنبيهات (في الخلفية عشان ميعطلش الرد)
-    (async () => {
-      try {
-        const currentStatus = aiAnalysis.status;
-        const criticalStatuses = [
-          "High Stress",
-          "Danger",
-          "Critical",
-          "Warning",
-        ];
-        const isCritical =
-          temp > 45 || Soil < 10 || criticalStatuses.includes(currentStatus);
-
-        if (isCritical) {
-          const io = req.app.get("io");
-          const socketPayload = {
-            title: "🚨 تنبيه خطر فوري",
-            message: `القطاع: ${sector.name} | الحالة: ${currentStatus} | حرارة: ${temp}°C`,
-            sectorId: sector._id,
-            createdAt: new Date(),
-          };
-
-          const usersToNotify = await User.find({
-            _id: { $in: [finalOwnerId, assignedWorkerId].filter(Boolean) },
-          }).select("fcmToken");
-
-          for (const user of usersToNotify) {
-            if (user.fcmToken) {
-              try {
-                await axios.post(
-                  "https://fcm.googleapis.com/fcm/send",
-                  {
-                    to: user.fcmToken,
-                    notification: {
-                      title: socketPayload.title,
-                      body: socketPayload.message,
-                      sound: "default",
-                    },
-                    priority: "high",
-                  },
-                  {
-                    headers: {
-                      Authorization: `key=${process.env.FIREBASE_SERVER_KEY}`,
-                      "Content-Type": "application/json",
-                    },
-                    timeout: 4000,
-                  },
-                );
-              } catch (fcmErr) {
-                console.log("Firebase Notify Error");
-              }
-            }
-          }
-
-          if (io) {
-            if (finalOwnerId)
-              io.to(finalOwnerId.toString()).emit(
-                "newNotification",
-                socketPayload,
-              );
-            if (assignedWorkerId)
-              io.to(assignedWorkerId.toString()).emit(
-                "newNotification",
-                socketPayload,
-              );
-          }
-
-          const notificationsToSave = [
-            {
-              recipient: finalOwnerId,
-              sectorId: sector._id,
-              title: socketPayload.title,
-              message: socketPayload.message,
-              type: "warning",
-            },
-          ];
-          if (assignedWorkerId) {
-            notificationsToSave.push({
-              recipient: assignedWorkerId,
-              sectorId: sector._id,
-              title: socketPayload.title,
-              message: socketPayload.message,
-              type: "warning",
-            });
-          }
-          await Notification.insertMany(notificationsToSave);
-        }
-      } catch (bgErr) {
-        console.error("❌ Background Task Error:", bgErr.message);
-      }
-    })();
+    // Background Processing
+    process.nextTick(() => {
+      processSensorData(savedData._id, req.app.get("io"));
+    });
   } catch (err) {
-    console.error("❌ Controller Error:", err.message);
+    console.error(err);
+
     if (!res.headersSent) {
-      res.status(500).json({ success: false, error: err.message });
+      res.status(500).json({
+        success: false,
+        error: err.message,
+      });
     }
   }
 };
