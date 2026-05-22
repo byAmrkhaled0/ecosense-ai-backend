@@ -86,9 +86,15 @@ const server = http.createServer(app);
 // 3️⃣ إعداد Socket.io
 const io = new Server(server, {
   cors: {
-    origin: (origin, callback) => callback(null, true),
+    origin: [
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "https://your-frontend-domain.com",
+    ],
     credentials: true,
   },
+  allowEIO3: true,
+  transports: ["polling", "websocket"], // 👈 السطر ده مهم جداً للباكيند والفرونت مع بعض
 });
 
 // تخزين الـ IO في الـ app لاستخدامه في الـ Controllers
