@@ -21,40 +21,30 @@ exports.createSector = async (req, res) => {
 };
 
 // @desc    جلب القطاعات (للمالك يرى الكل، وللعامل يرى ما يخصه فقط)
-export const getSectors = async (req, res) => {
+exports.getSectors = async (req, res) => {
   try {
-    let filter = {};
+    let query = {};
 
-    // Worker => sectors اللي متضاف فيها
-    if (req.user.role === "worker") {
-      filter = {
-        workers: req.user._id,
-      };
+    if (req.user.role === "owner") {
+      // المالك يشوف كل القطاعات اللي هو أنشأها
+      query = { ownerId: req.user._id }; // 👈 التعديل هنا
+    } else if (req.user.role === "worker") {
+      // العامل يشوف فقط القطاعات اللي هو متسجل فيها كـ assignedWorker
+      query = { assignedWorker: req.user._id };
     }
 
-    // Owner => sectors الخاصة بيه
-    else if (req.user.role === "owner") {
-      filter = {
-        ownerId: req.user._id,
-      };
-    }
-
-    const sectors = await Sector.find(filter)
-      .populate("workers", "name email")
-      .sort({ createdAt: -1 });
+    const sectors = await Sector.find(query).populate(
+      "assignedWorker",
+      "firstName lastName phoneNumber",
+    );
 
     res.status(200).json({
       success: true,
       count: sectors.length,
       data: sectors,
     });
-  } catch (error) {
-    console.error("Get sectors error:", error);
-
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 };
 
