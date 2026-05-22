@@ -33,7 +33,7 @@ app.use(
     origin: [
       "http://localhost:3000",
       "http://localhost:5173",
-      "https://your-frontend-domain.com",
+      "https://your-frontend-domain.com", // 👈 تذكر تغيير هذا الدومين لرابط الـ الفرونت النهائي
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -53,7 +53,6 @@ app.use(hpp());
 app.use(mongoSanitize());
 
 // 🧹 تعديل دالة الـ HTML Sanitization (XSS Prevention)
-// الفحص يتم فقط لو البيانات مش FormData عشان ما يمسحش أو يبوظ بيانات وملفات الرفع
 app.use((req, res, next) => {
   if (
     req.body &&
@@ -94,11 +93,16 @@ const io = new Server(server, {
     credentials: true,
   },
   allowEIO3: true,
-  transports: ["polling", "websocket"], // 👈 السطر ده مهم جداً للباكيند والفرونت مع بعض
+  transports: ["polling", "websocket"],
 });
 
 // تخزين الـ IO في الـ app لاستخدامه في الـ Controllers
 app.set("io", io);
+
+// 🚨 التعديل السحري لـ Vercel: ترويض مسار الـ socket.io ومنعه من السقوط في الـ 404
+app.get("/socket.io/", (req, res) => {
+  res.status(200).end();
+});
 
 // تعريف منطق Socket.io
 io.on("connection", (socket) => {
