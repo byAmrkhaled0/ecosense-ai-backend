@@ -8,7 +8,7 @@ const connectDB = require("./config/db");
 const passport = require("passport");
 const cookieParser = require("cookie-parser");
 
-// 🛡️ Security Libraries
+// 🛡️ Security
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const sanitizeHtml = require("sanitize-html");
@@ -20,29 +20,31 @@ const morgan = require("morgan");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./swagger");
 
-// 1️⃣ إنشاء تطبيق Express أولاً
+// ============================
+// 1️⃣ App init
+// ============================
 const app = express();
+const server = http.createServer(app);
 
 // ============================
-// 🛡️ Middlewares & Security (الترتيب الصحيح والمعدل)
+// 🛡️ Middlewares
 // ============================
 
-// تشغيل الـ CORS والـ OPTIONS أولاً لضمان عدم رفض أو سقوط أي هيدرز (Authorization)
 app.use(
   cors({
     origin: [
       "http://localhost:3000",
       "http://localhost:5173",
-      "https://your-frontend-domain.com", // 👈 تذكر تغيير هذا الدومين لرابط الـ الفرونت النهائي
+      "https://your-frontend-domain.com",
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   }),
 );
+
 app.options("*", cors());
 
-// الـ Body Parsers والـ Cookie Parser في البداية عشان البيانات تتقرأ فوراً
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -52,13 +54,9 @@ app.use(helmet());
 app.use(hpp());
 app.use(mongoSanitize());
 
-// 🧹 تعديل دالة الـ HTML Sanitization (XSS Prevention)
+// 🧹 XSS clean
 app.use((req, res, next) => {
-  if (
-    req.body &&
-    typeof req.body === "object" &&
-    !req.headers["content-type"]?.includes("multipart/form-data")
-  ) {
+  if (req.body && typeof req.body === "object") {
     Object.keys(req.body).forEach((key) => {
       if (typeof req.body[key] === "string") {
         req.body[key] = sanitizeHtml(req.body[key], {
@@ -71,18 +69,19 @@ app.use((req, res, next) => {
   next();
 });
 
-// Rate Limiter
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: "Too many requests from this IP, please try again after 15 minutes",
-});
-app.use("/api", limiter);
+// Rate limit
+app.use(
+  "/api",
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+  }),
+);
 
-// 2️⃣ إنشاء سيرفر HTTP وربطه بـ Express
-const server = http.createServer(app);
+// ============================
+// 2️⃣ Socket.io Setup
+// ============================
 
-// 3️⃣ إعداد Socket.io
 const io = new Server(server, {
   cors: {
     origin: [
@@ -92,60 +91,57 @@ const io = new Server(server, {
     ],
     credentials: true,
   },
-  allowEIO3: true,
-  transports: ["polling", "websocket"],
+  transports: ["websocket"],
 });
 
-// تخزين الـ IO في الـ app لاستخدامه في الـ Controllers
 app.set("io", io);
 
-// 🚨 التعديل السحري لـ Vercel: ترويض مسار الـ socket.io ومنعه من السقوط في الـ 404
-app.get("/socket.io/", (req, res) => {
-  res.status(200).end();
-});
+// ❌ IMPORTANT: DO NOT add /socket.io route (it breaks socket handshake)
 
-// تعريف منطق Socket.io
+// ============================
+// Socket logic
+// ============================
 io.on("connection", (socket) => {
-  console.log("🟢 A user connected: ", socket.id);
+  console.log("🟢 Connected:", socket.id);
 
+  // join room
   socket.on("join", (userId) => {
+    if (!userId) return;
+
     socket.join(userId);
-    console.log(`👤 User ${userId} joined their private room`);
+    console.log(`👤 User joined room: ${userId}`);
   });
 
-  socket.on("disconnect", () => {
-    console.log("🔴 User disconnected");
+  socket.on("disconnect", (reason) => {
+    console.log("🔴 Disconnected:", socket.id, reason);
   });
 });
 
-// 🔌 الاتصال بقاعدة البيانات
+// ============================
+// 3️⃣ DB
+// ============================
 connectDB();
 
-// 🛡️ إعدادات Passport
+// ============================
+// 4️⃣ Passport
+// ============================
 require("./config/passport")(passport);
 app.use(passport.initialize());
 
 // ============================
-// 📂 Static Folders
+// 5️⃣ Static
 // ============================
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // ============================
-// 📖 Swagger Documentation
+// 6️⃣ Swagger
 // ============================
-app.use(
-  "/api-docs",
-  swaggerUi.serve,
-  swaggerUi.setup(swaggerSpec, {
-    swaggerOptions: { persistAuthorization: true },
-    customSiteTitle: "EcoSense API Documentation",
-  }),
-);
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // ============================
-// 🛤️ Routes Mapping
+// 7️⃣ Routes
 // ============================
-app.get("/", (req, res) => res.send("EcoSense Backend Running Securely 🔐🚀"));
+app.get("/", (req, res) => res.send("EcoSense Backend Running 🚀"));
 
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/users", require("./routes/userRoutes"));
@@ -158,38 +154,47 @@ app.use("/api/admin", require("./routes/adminRoutes"));
 app.use("/api/reports", require("./routes/reportRoutes"));
 
 // ============================
-// ❌ 404 Handler
+// 8️⃣ Test Socket Route (IMPORTANT)
 // ============================
-app.use((req, res, next) => {
+app.get("/test-socket/:id", (req, res) => {
+  const { id } = req.params;
+
+  io.to(id).emit("newNotification", {
+    title: "Test Notification",
+    message: "Socket is working perfectly 🚀",
+  });
+
+  res.json({ success: true });
+});
+
+// ============================
+// 9️⃣ Error handling
+// ============================
+app.use((req, res) => {
   res.status(404).json({
     success: false,
     message: `Route not found: ${req.originalUrl}`,
   });
 });
 
-// ============================
-// 🔥 Global Error Handler
-// ============================
 app.use((err, req, res, next) => {
-  console.error("🔥 Server Error:", err.stack);
+  console.error("🔥 Error:", err);
   res.status(500).json({
     success: false,
-    error: err.message || "Internal Server Error",
+    message: err.message || "Server Error",
   });
 });
 
 // ============================
-// 🚀 Start Server
+// 🚀 Start server
 // ============================
 const PORT = process.env.PORT || 6000;
+
 server.listen(PORT, () => {
   console.log(`
-    *****************************************
-    🌐 EcoSense Secure Server is LIVE
-    🚀 Port: ${PORT}
-    🛡️ Mode: ${process.env.NODE_ENV || "development"}
-    📡 Socket.io: Enabled
-    *****************************************
+🚀 Server running on port ${PORT}
+🔌 Socket.io enabled
+🛡️ Secure mode: ${process.env.NODE_ENV || "dev"}
   `);
 });
 
