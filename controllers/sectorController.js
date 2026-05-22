@@ -25,36 +25,23 @@ export const getSectors = async (req, res) => {
   try {
     let filter = {};
 
-    // Worker => sectors اللي متضاف فيها
+    // لو المستخدم عامل، هجيب القطاعات اللي هو متسجل فيها بس
     if (req.user.role === "worker") {
-      filter = {
-        workers: req.user._id,
-      };
+      filter = { workers: req.user._id }; // تأكد أن اسم الحقل في الـ Schema عندك هو workers
     }
-
-    // Owner => sectors الخاصة بيه
+    // لو المستخدم مالك، هجيب القطاعات المربوطة بحسابه هو بس
     else if (req.user.role === "owner") {
-      filter = {
-        ownerId: req.user._id,
-      };
+      filter = { ownerId: req.user._id }; // أو حسب اسم حقل المالك عندك
     }
 
-    const sectors = await Sector.find(filter)
-      .populate("workers", "name email")
-      .sort({ createdAt: -1 });
+    const sectors = await Sector.find(filter);
 
     res.status(200).json({
       success: true,
-      count: sectors.length,
       data: sectors,
     });
   } catch (error) {
-    console.error("Get sectors error:", error);
-
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
