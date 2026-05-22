@@ -8,7 +8,6 @@ const connectDB = require("./config/db");
 const passport = require("passport");
 const cookieParser = require("cookie-parser");
 
-// 🛡️ Security
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const sanitizeHtml = require("sanitize-html");
@@ -16,20 +15,18 @@ const hpp = require("hpp");
 const mongoSanitize = require("express-mongo-sanitize");
 const morgan = require("morgan");
 
-// Swagger
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./swagger");
 
-// ============================
-// 1️⃣ App init
-// ============================
+// ======================
+// APP INIT
+// ======================
 const app = express();
 const server = http.createServer(app);
 
-// ============================
-// 🛡️ Middlewares
-// ============================
-
+// ======================
+// CORS
+// ======================
 app.use(
   cors({
     origin: [
@@ -45,6 +42,9 @@ app.use(
 
 app.options("*", cors());
 
+// ======================
+// BASIC MIDDLEWARES
+// ======================
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -54,7 +54,7 @@ app.use(helmet());
 app.use(hpp());
 app.use(mongoSanitize());
 
-// 🧹 XSS clean
+// XSS sanitize
 app.use((req, res, next) => {
   if (req.body && typeof req.body === "object") {
     Object.keys(req.body).forEach((key) => {
@@ -78,10 +78,9 @@ app.use(
   }),
 );
 
-// ============================
-// 2️⃣ Socket.io Setup
-// ============================
-
+// ======================
+// SOCKET.IO SETUP (Vercel-safe)
+// ======================
 const io = new Server(server, {
   cors: {
     origin: [
@@ -91,25 +90,22 @@ const io = new Server(server, {
     ],
     credentials: true,
   },
-  transports: ["websocket"],
+  transports: ["polling", "websocket"], // IMPORTANT for Vercel
 });
 
 app.set("io", io);
 
-// ❌ IMPORTANT: DO NOT add /socket.io route (it breaks socket handshake)
-
-// ============================
-// Socket logic
-// ============================
+// ======================
+// SOCKET EVENTS
+// ======================
 io.on("connection", (socket) => {
   console.log("🟢 Connected:", socket.id);
 
-  // join room
   socket.on("join", (userId) => {
     if (!userId) return;
 
     socket.join(userId);
-    console.log(`👤 User joined room: ${userId}`);
+    console.log(`👤 Joined room: ${userId}`);
   });
 
   socket.on("disconnect", (reason) => {
@@ -117,31 +113,33 @@ io.on("connection", (socket) => {
   });
 });
 
-// ============================
-// 3️⃣ DB
-// ============================
+// ======================
+// DB
+// ======================
 connectDB();
 
-// ============================
-// 4️⃣ Passport
-// ============================
+// ======================
+// PASSPORT
+// ======================
 require("./config/passport")(passport);
 app.use(passport.initialize());
 
-// ============================
-// 5️⃣ Static
-// ============================
+// ======================
+// STATIC
+// ======================
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// ============================
-// 6️⃣ Swagger
-// ============================
+// ======================
+// SWAGGER
+// ======================
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// ============================
-// 7️⃣ Routes
-// ============================
-app.get("/", (req, res) => res.send("EcoSense Backend Running 🚀"));
+// ======================
+// ROUTES
+// ======================
+app.get("/", (req, res) => {
+  res.send("EcoSense Backend Running 🚀");
+});
 
 app.use("/api/auth", require("./routes/authRoutes"));
 app.use("/api/users", require("./routes/userRoutes"));
@@ -153,46 +151,49 @@ app.use("/api/main", require("./routes/mainRoutes"));
 app.use("/api/admin", require("./routes/adminRoutes"));
 app.use("/api/reports", require("./routes/reportRoutes"));
 
-// ============================
-// 8️⃣ Test Socket Route (IMPORTANT)
-// ============================
+// ======================
+// TEST SOCKET ROUTE
+// ======================
 app.get("/test-socket/:id", (req, res) => {
   const { id } = req.params;
 
   io.to(id).emit("newNotification", {
     title: "Test Notification",
-    message: "Socket is working perfectly 🚀",
+    message: "Socket is working 🚀",
   });
 
   res.json({ success: true });
 });
 
-// ============================
-// 9️⃣ Error handling
-// ============================
+// ======================
+// 404
+// ======================
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: `Route not found: ${req.originalUrl}`,
+    message: "Route not found",
   });
 });
 
+// ======================
+// ERROR HANDLER
+// ======================
 app.use((err, req, res, next) => {
-  console.error("🔥 Error:", err);
+  console.error(err);
   res.status(500).json({
     success: false,
     message: err.message || "Server Error",
   });
 });
 
-// ============================
-// 🚀 Start server
-// ============================
+// ======================
+// START SERVER
+// ======================
 const PORT = process.env.PORT || 6000;
 
 server.listen(PORT, () => {
   console.log(`
-🚀 Server running on port ${PORT}
+🚀 Server running on ${PORT}
 🔌 Socket.io enabled
 🛡️ Secure mode: ${process.env.NODE_ENV || "dev"}
   `);
