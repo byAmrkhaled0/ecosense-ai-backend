@@ -317,33 +317,24 @@ exports.socialAuthSuccess = async (req, res) => {
   try {
     const user = req.user;
 
+    // حدد رابط الفرونت إند بتاعك (محلي أو المرفوع على المخدم)
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+
     if (!user) {
-      return res
-        .status(401)
-        .json({ success: false, message: "User not found" });
+      // لو مفيش مستخدم رجعه لصفحة اللوجن مع رسالة خطأ في الرابط
+      return res.redirect(`${frontendUrl}/login?error=user_not_found`);
     }
 
-    // توليد التوكن مباشرة هنا عشان نضمن إنه يشتغل
+    // توليد التوكن
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
       expiresIn: process.env.JWT_EXPIRE || "30d",
     });
 
-    res.status(200).json({
-      success: true,
-      token,
-      user: {
-        id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        role: user.role,
-      },
-    });
+    // تحويل المستخدم للفرونت إند وتمرير التوكن في الرابط بشكل آمن
+    return res.redirect(`${frontendUrl}/login?token=${token}`);
   } catch (err) {
     console.error("Social Auth Success Error:", err.message);
-    res.status(500).json({
-      success: false,
-      message: "Server error during token generation",
-    });
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    return res.redirect(`${frontendUrl}/login?error=server_error`);
   }
 };
