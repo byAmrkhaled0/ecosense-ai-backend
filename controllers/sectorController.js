@@ -21,30 +21,27 @@ exports.createSector = async (req, res) => {
 };
 
 // @desc    جلب القطاعات (للمالك يرى الكل، وللعامل يرى ما يخصه فقط)
-exports.getSectors = async (req, res) => {
+export const getSectors = async (req, res) => {
   try {
-    let query = {};
+    let filter = {};
 
-    if (req.user.role === "owner") {
-      // المالك يشوف كل القطاعات اللي هو أنشأها
-      query = { ownerId: req.user._id }; // 👈 التعديل هنا
-    } else if (req.user.role === "worker") {
-      // العامل يشوف فقط القطاعات اللي هو متسجل فيها كـ assignedWorker
-      query = { assignedWorker: req.user._id };
+    // لو المستخدم عامل، هجيب القطاعات اللي هو متسجل فيها بس
+    if (req.user.role === "worker") {
+      filter = { workers: req.user._id }; // تأكد أن اسم الحقل في الـ Schema عندك هو workers
+    }
+    // لو المستخدم مالك، هجيب القطاعات المربوطة بحسابه هو بس
+    else if (req.user.role === "owner") {
+      filter = { ownerId: req.user._id }; // أو حسب اسم حقل المالك عندك
     }
 
-    const sectors = await Sector.find(query).populate(
-      "assignedWorker",
-      "firstName lastName phoneNumber",
-    );
+    const sectors = await Sector.find(filter);
 
     res.status(200).json({
       success: true,
-      count: sectors.length,
       data: sectors,
     });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
