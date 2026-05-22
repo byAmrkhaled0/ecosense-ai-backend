@@ -191,8 +191,9 @@ exports.loginUser = async (req, res) => {
 exports.verifyAndRegister = async (req, res) => {
   try {
     const { code } = req.body;
-    // قراءة التوكن من الكوكيز تلقائياً
-    const tempToken = req.cookies.registrationToken;
+
+    // 🔥 مهم جدًا: التوكن من الكوكيز
+    const tempToken = req.cookies?.registrationToken;
 
     if (!tempToken) {
       return res.status(400).json({
@@ -201,54 +202,65 @@ exports.verifyAndRegister = async (req, res) => {
       });
     }
 
-    // فك التشفير والتحقق من صحة التوكن
-    const decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
+    // 🔐 فك التوكن
+    let decoded;
+    try {
+      decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
+    } catch (err) {
+      if (err.name === "TokenExpiredError") {
+        return res.status(400).json({
+          success: false,
+          message: "انتهت صلاحية الجلسة (10 دقائق)، يرجى التسجيل من جديد.",
+        });
+      }
 
-    // التحقق من كود التفعيل المبعوث في الإيميل
-    if (decoded.verificationCode !== code) {
       return res.status(400).json({
         success: false,
-        message: "الرمز غير صحيح، تأكد من الكود المرسل لإيميلك.",
+        message: "جلسة غير صالحة، يرجى إعادة المحاولة.",
       });
     }
 
-    // 🚩 التعديل هنا: حفظ المستخدم في الداتابيز (تأكد من استخدام ... لفرط البيانات)
+    // 🔥 التحقق من الكود
+    if (!decoded?.verificationCode) {
+      return res.status(400).json({
+        success: false,
+        message: "بيانات التحقق غير مكتملة.",
+      });
+    }
+
+    if (decoded.verificationCode !== code) {
+      return res.status(400).json({
+        success: false,
+        message: "الرمز غير صحيح، حاول مرة أخرى.",
+      });
+    }
+
+    // 🚀 إنشاء المستخدم
     const newUser = await User.create({
       ...decoded.userData,
       isVerified: true,
     });
 
-    // الرد بنجاح ومسح الكوكيز عشان الجلسة المؤقتة تنتهي
-    res
-      .status(201)
-      .clearCookie("registrationToken")
-      .json({
-        success: true,
-        message: "✅ تم تفعيل حسابك وإنشاؤه بنجاح!",
-        user: {
-          id: newUser._id,
-          email: newUser.email,
-          name: `${newUser.firstName} ${newUser.lastName}`,
-        },
-      });
-  } catch (err) {
-    // التعامل مع أخطاء الـ JWT بشكل احترافي
-    if (err.name === "TokenExpiredError") {
-      return res.status(400).json({
-        success: false,
-        message: "انتهت صلاحية الجلسة (10 دقائق)، يرجى إعادة التسجيل من جديد.",
-      });
-    }
-    if (err.name === "JsonWebTokenError") {
-      return res.status(400).json({
-        success: false,
-        message: "الجلسة غير صالحة أو تم التلاعب بها.",
-      });
-    }
+    // 🍪 حذف الكوكيز بشكل آمن
+    res.clearCookie("registrationToken", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+    });
 
-    // أي خطأ آخر (مثل خطأ في الداتابيز)
-    console.error("Error in verifyAndRegister:", err);
-    res.status(500).json({
+    return res.status(201).json({
+      success: true,
+      message: "تم تفعيل الحساب بنجاح 🚀",
+      user: {
+        id: newUser._id,
+        email: newUser.email,
+        name: `${newUser.firstName} ${newUser.lastName}`,
+      },
+    });
+  } catch (err) {
+    console.error("verifyAndRegister error:", err);
+
+    return res.status(500).json({
       success: false,
       message: "حدث خطأ داخلي أثناء التفعيل.",
     });
