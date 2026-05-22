@@ -181,7 +181,7 @@ exports.loginUser = async (req, res) => {
 
 exports.verifyAndRegister = async (req, res) => {
   try {
-    // 🔥 التعديل هنا: بنستقبل الـ registrationToken من الـ body اللي جاي من الفرونت إند مباشرة
+    // 1️⃣ استقبال الـ registrationToken والـ code من الـ body مباشرة
     const { code, registrationToken } = req.body;
 
     const tempToken = registrationToken || req.cookies?.registrationToken;
@@ -194,7 +194,7 @@ exports.verifyAndRegister = async (req, res) => {
       });
     }
 
-    // 🔐 فك التوكن
+    // 2️⃣ فك التوكن والتحقق من صلاحيته
     let decoded;
     try {
       decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
@@ -211,36 +211,46 @@ exports.verifyAndRegister = async (req, res) => {
       });
     }
 
-    // 🔥 التحقق من الكود
+    // 3️⃣ التحقق من الكود (OTP) المرسل
     if (!decoded?.verificationCode) {
-      return res
-        .status(400)
-        .json({ success: false, message: "بيانات التحقق غير مكتملة." });
+      return res.status(400).json({
+        success: false,
+        message: "بيانات التحقق غير مكتملة.",
+      });
     }
 
     if (decoded.verificationCode !== code) {
-      return res
-        .status(400)
-        .json({ success: false, message: "الرمز غير صحيح، حاول مرة أخرى." });
+      return res.status(400).json({
+        success: false,
+        message: "الرمز غير صحيح، حاول مرة أخرى.",
+      });
     }
 
-    // 🚀 إنشاء المستخدم
+    // 4️⃣ إنشاء المستخدم وتفعيله في الداتابيز
     const newUser = await User.create({
       ...decoded.userData,
       isVerified: true,
     });
 
-    // 🔥 الحتة السحرية: توليد توكن تسجيل الدخول الأساسي فوراً للمستخدم الجديد
+    // 5️⃣ توليد توكن الدخول الأساسي (Auth Token) ليدخل فوراً
     const authToken = jwt.sign(
       { id: newUser._id },
       process.env.JWT_SECRET,
-      { expiresIn: "1d" }, // صلاحيته يوم أو حسب نظام سيستمك
+      { expiresIn: "1d" }, // صالح لمدة يوم
     );
 
+    // 6️⃣ تنظيف الكوكي المؤقتة بشكل آمن من المتصفح لعدم تكرار الطلب
+    res.clearCookie("registrationToken", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+    });
+
+    // 7️⃣ إرجاع رد النجاح مع توكن الدخول التلقائي والبيانات
     return res.status(201).json({
       success: true,
       message: "تم تفعيل الحساب ودخولك تلقائياً 🚀",
-      token: authToken, // 👈 بنبعت التوكن هنا عشان الفرونت يمسكه
+      token: authToken, // التوكن اللي الفرونت إند هيحفظه في الـ localStorage
       user: {
         id: newUser._id,
         email: newUser.email,
@@ -249,9 +259,10 @@ exports.verifyAndRegister = async (req, res) => {
     });
   } catch (err) {
     console.error("verifyAndRegister error:", err);
-    return res
-      .status(500)
-      .json({ success: false, message: "حدث خطأ داخلي أثناء التفعيل." });
+    return res.status(500).json({
+      success: false,
+      message: "حدث خطأ داخلي أثناء التفعيل.",
+    });
   }
 };
 // 👤 Get Me
