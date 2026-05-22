@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title data-i18n="dashboardTitle">Dashboard - EcoSense</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body class="dashboard-page">
+
+    <!-- ===== Top Navbar ===== -->
+    <header class="topbar">
+        <button id="menuToggle" class="menu-btn">
+            <i class="fa-solid fa-bars"></i>
+        </button>
+
+        <img src="images/Logo-removebg-preview-removebg-preview.png" class="logo">
+
+        <button id="langToggle" class="lang-btn">
+            <i class="fa-solid fa-globe"></i>
+        </button>
+    </header>
+
+    <!-- ===== Layout ===== -->
+    <div class="dashboard-layout">
+
+        <!-- ===== Sidebar ===== -->
+        <aside class="sidebar">
+
+            <h3 class="menu-title" data-i18n="dashboard">Dashboard</h3>
+
+            <ul>
+                <li class="active" data-i18n="dashboard">Dashboard</li>
+                <li onclick="window.location.href='sensors.html'" data-i18n="sensors">
+                    Sensors
+                </li>
+                <li onclick="window.location.href='Ai-prediction.html'" data-i18n="aIprediction">
+                    AI Prediction
+                </li>
+                <li onclick="window.location.href='images.html'" data-i18n="images">
+                    Images
+                </li>
+                <li onclick="window.location.href='ai-chat.html'" data-i18n="aiChat">
+                    AI Chat
+                </li>
+            </ul>
+
+        </aside>
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+        <!-- ===== Main Content ===== -->
+        <main class="main-content">
+
+            <h2 data-i18n="dashboardOverview">Dashboard Overview</h2>
+
+            <div class="welcome-box">
+                <h3 data-i18n="welcomeBack">Welcome back 👋</h3>
+                <p data-i18n="overviewText">
+                    Here is a quick overview of your latest agricultural data.
+                </p>
+            </div>
+
+            <!-- ===== Stats Cards ===== -->
+            <div class="stats-cards">
+
+                <div class="card">
+                    <p data-i18n="soilMoisture">Soil Moisture</p>
+                    <h3>42%</h3>
+                    <span class="badge normal" data-i18n="normal">Normal</span>
+                </div>
+
+                <div class="card">
+                    <p data-i18n="soilTemp">Soil Temperature</p>
+                    <h3>24°C</h3>
+                    <span class="badge stable" data-i18n="stable">Stable</span>
+                </div>
+
+                <div class="card">
+                    <p data-i18n="activeAlerts">Active Alerts</p>
+                    <h3>3</h3>
+                    <span class="badge alert" data-i18n="attention">Attention</span>
+                </div>
+
+            </div>
+
+            <!-- ===== Quick Actions ===== -->
+            <div class="quick-actions">
+                <h3 data-i18n="quickActions">Quick Actions</h3>
+
+                <div class="action-buttons">
+                    <button id="uploadBtn" class="primary-btn" data-i18n="uploadData">
+                        Upload Sensor Data
+                    </button>
+
+                    <button id="predictBtn" class="secondary-btn" data-i18n="predictAI">
+                        Predict (AI)
+                    </button>
+                </div>
+            </div>
+
+            <!-- ===== Chart Section ===== -->
+            <div class="chart-section">
+                <h3 data-i18n="latestSummary">Latest Sensor Summary</h3>
+
+                <div class="chart-placeholder">
+                    <!-- هنحط Chart.js هنا بعدين -->
+                </div>
+            </div>
+
+        </main>
+
+    </div>
+
+    <footer data-i18n="footerText">
+        © 2026 EcoSense – Smart Agriculture Monitoring Platform
+    </footer>
+    <script src="js/translation.js"></script>
+    <script src="js/main.js"></script>
+
+</body>
+
+</html>
