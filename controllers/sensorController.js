@@ -145,14 +145,14 @@ exports.analyzeLastReading = async (req, res) => {
           humidity: Number(lastReading.air.humidity),
           soilMoisture: Number(lastReading.soil.moisture),
           soilTemp: Number(lastReading.air.temperature) - 2,
-          light: formattedLight, // تأكد إذا كان السيرفر يتوقعها نصية أو حقل رقمي
+          light: formattedLight,
         },
         {
           headers: {
             "Content-Type": "application/json",
             "ngrok-skip-browser-warning": "true",
           },
-          timeout: 10000, // رفعنا الـ timeout لـ 10 ثواني لضمان الرد
+          timeout: 10000,
         },
       );
 
@@ -160,7 +160,6 @@ exports.analyzeLastReading = async (req, res) => {
         const data = aiResponse.data;
         console.log("✅ AI Response Data:", data);
 
-        // معالجة مرنة للتوصيات لو رجعت Array أو نص عادي
         let recs = "لا توجد توصيات حالياً";
         if (data.recommendations) {
           recs = Array.isArray(data.recommendations)
@@ -176,7 +175,6 @@ exports.analyzeLastReading = async (req, res) => {
         };
       }
     } catch (aiErr) {
-      // طباعة تفاصيل الخطأ كاملة في الـ Console عندك عشان تعرف سيرفر الـ AI زعلان من إيه بالظبط
       console.error(
         "⚠️ AI Server Error Details:",
         aiErr.response ? aiErr.response.data : aiErr.message,
@@ -205,25 +203,34 @@ exports.analyzeLastReading = async (req, res) => {
           "Warning",
         ];
 
+        // التحقق المرن: لو النص يحتوي على كلمة حرج أو خطر بالعربي أو مطابق للإنجليزي
         const isCritical =
           lastReading.air.temperature > 45 ||
           lastReading.soil.moisture < 10 ||
-          criticalStatuses.includes(currentStatus);
+          criticalStatuses.includes(currentStatus) ||
+          currentStatus.includes("حرجة") ||
+          currentStatus.includes("خطر");
 
+        // 🚨 جهزنا الـ Payload برا الـ if لضمان استخدامه في البث العام
+        const io = req.app.get("io");
+        const socketPayload = {
+          title: "🚨 تنبيه خطر فوري",
+          message: `القطاع: ${sector.name} | الحالة: ${currentStatus} | حرارة: ${lastReading.air.temperature}°C`,
+          sectorId: sector._id,
+          createdAt: new Date(),
+        };
+
+        if (io) {
+          // 🔥 تعديل الأمان: البث العام بره الـ if الحرجة لضمان وصوله للشاشة حالاً أثناء التجربة!
+          io.emit("newNotification", socketPayload);
+          console.log(
+            "📢 [Socket Global] تم بث الإشعار بنجاح للجميع بره شروط الـ if",
+          );
+        }
+
+        // الحفاظ على المنطق القديم لحفظ الداتابيز وإرسال الهاتف لو حرج فعلياً
         if (isCritical) {
-          const io = req.app.get("io");
-          const socketPayload = {
-            title: "🚨 تنبيه خطر فوري",
-            message: `القطاع: ${sector.name} | الحالة: ${currentStatus} | حرارة: ${lastReading.air.temperature}°C`,
-            sectorId: sector._id,
-            createdAt: new Date(),
-          };
-
           if (io) {
-            // 👇 ضيف السطر ده فوراً فوق الـ Rooms عشان يبعت للكل وتشوفه في شاشتك
-            io.emit("newNotification", socketPayload);
-            console.log("📢 تم بث الإشعار بنجاح للجميع عبر السوكت");
-
             if (finalOwnerId)
               io.to(finalOwnerId.toString()).emit(
                 "newNotification",
@@ -235,6 +242,7 @@ exports.analyzeLastReading = async (req, res) => {
                 socketPayload,
               );
           }
+
           const usersToNotify = await User.find({
             _id: { $in: [finalOwnerId, assignedWorkerId].filter(Boolean) },
           }).select("fcmToken");
@@ -300,7 +308,6 @@ exports.analyzeLastReading = async (req, res) => {
     }
   }
 };
-
 /* ============================================================
 3️⃣ GET LATEST READING (آخر قراءة محدثة للـ Dashboard)
 ============================================================ */
