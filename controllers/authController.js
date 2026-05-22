@@ -30,7 +30,7 @@ exports.registerUser = async (req, res) => {
 
     if (email) email = email.trim().toLowerCase();
 
-    // 1. التأكد من أن المستخدم مش موجود فعلاً في الداتابيز الأساسية
+    // 1. التأكد من أن المستخدم مش موجود فعلاً
     const existing = await User.findOne({ email });
     if (existing) {
       return res
@@ -38,13 +38,12 @@ exports.registerUser = async (req, res) => {
         .json({ success: false, message: "المستخدم موجود بالفعل ومفعل." });
     }
 
-    // 2. توليد رمز تفعيل عشوائي (مثلاً 6 أرقام)
+    // 2. توليد رمز تفعيل عشوائي
     const verificationCode = Math.floor(
       100000 + Math.random() * 900000,
     ).toString();
 
-    // 3. تشفير بيانات المستخدم + الرمز في JWT (صلاحيته 10 دقائق)
-    // الطريقة دي بتخلي السيرفر "مش شايل هم" تخزين البيانات عنده
+    // 3. تشفير بيانات المستخدم + الرمز في JWT
     const tempToken = jwt.sign(
       {
         userData: {
@@ -75,19 +74,12 @@ exports.registerUser = async (req, res) => {
         message: emailMessage,
       });
 
-      const cookieOptions = {
-        expires: new Date(Date.now() + 10 * 60 * 1000), // 10 دقائق
-        httpOnly: true, // تمنع الوصول للتوكن عبر الـ JavaScript (حماية من XSS)
-        secure: process.env.NODE_ENV === "production", // تعمل فقط عبر HTTPS في الإنتاج
-      };
-
-      res
-        .status(200)
-        .cookie("registrationToken", tempToken, cookieOptions) // 👈 التوكن اتبعت "تلقائياً"
-        .json({
-          success: true,
-          message: "تم إرسال رمز التفعيل للإيميل. (التوكن محفوظ في الكوكيز)",
-        });
+      // 🔥 التعديل هنا: بنبعت الـ tempToken جوه الـ json عشان الفرونت إند يستلمه ويمسكه في إيده
+      return res.status(200).json({
+        success: true,
+        message: "تم إرسال رمز التفعيل للإيميل.",
+        registrationToken: tempToken, // 👈 أهو ده اللي هينقذنا
+      });
     } catch (err) {
       return res
         .status(500)
@@ -187,18 +179,18 @@ exports.loginUser = async (req, res) => {
   }
 };
 
-// 📧 Verify Code (OTP)
 exports.verifyAndRegister = async (req, res) => {
   try {
-    const { code } = req.body;
+    // 🔥 التعديل هنا: بنستقبل الـ registrationToken من الـ body اللي جاي من الفرونت إند مباشرة
+    const { code, registrationToken } = req.body;
 
-    // 🔥 مهم جدًا: التوكن من الكوكيز
-    const tempToken = req.cookies?.registrationToken;
+    const tempToken = registrationToken || req.cookies?.registrationToken;
 
     if (!tempToken) {
       return res.status(400).json({
         success: false,
-        message: "انتهت صلاحية جلسة التسجيل، يرجى إعادة المحاولة.",
+        message:
+          "انتهت صلاحية جلسة التسجيل أو التوكن مفقود، يرجى إعادة المحاولة.",
       });
     }
 
@@ -213,7 +205,6 @@ exports.verifyAndRegister = async (req, res) => {
           message: "انتهت صلاحية الجلسة (10 دقائق)، يرجى التسجيل من جديد.",
         });
       }
-
       return res.status(400).json({
         success: false,
         message: "جلسة غير صالحة، يرجى إعادة المحاولة.",
@@ -222,30 +213,21 @@ exports.verifyAndRegister = async (req, res) => {
 
     // 🔥 التحقق من الكود
     if (!decoded?.verificationCode) {
-      return res.status(400).json({
-        success: false,
-        message: "بيانات التحقق غير مكتملة.",
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "بيانات التحقق غير مكتملة." });
     }
 
     if (decoded.verificationCode !== code) {
-      return res.status(400).json({
-        success: false,
-        message: "الرمز غير صحيح، حاول مرة أخرى.",
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "الرمز غير صحيح، حاول مرة أخرى." });
     }
 
     // 🚀 إنشاء المستخدم
     const newUser = await User.create({
       ...decoded.userData,
       isVerified: true,
-    });
-
-    // 🍪 حذف الكوكيز بشكل آمن
-    res.clearCookie("registrationToken", {
-      httpOnly: true,
-      secure: true,
-      sameSite: "none",
     });
 
     return res.status(201).json({
@@ -259,11 +241,9 @@ exports.verifyAndRegister = async (req, res) => {
     });
   } catch (err) {
     console.error("verifyAndRegister error:", err);
-
-    return res.status(500).json({
-      success: false,
-      message: "حدث خطأ داخلي أثناء التفعيل.",
-    });
+    return res
+      .status(500)
+      .json({ success: false, message: "حدث خطأ داخلي أثناء التفعيل." });
   }
 };
 // 👤 Get Me
