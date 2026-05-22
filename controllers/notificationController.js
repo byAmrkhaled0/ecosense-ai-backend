@@ -5,25 +5,21 @@ exports.getNotifications = async (req, res) => {
   try {
     let query = {};
 
-    // تحديد الفلتر بناءً على دور المستخدم
     if (req.user.role === "worker") {
-      // العامل يرى تنبيهات القطاع المسؤول عنه فقط
-      // تأكد أن "assignedSector" مخزن في req.user من خلال الـ Auth Middleware
       if (!req.user.assignedSector) {
         return res.status(200).json({ success: true, count: 0, data: [] });
       }
       query = { sectorId: req.user.assignedSector };
     } else {
-      // المالك يرى كل التنبيهات الموجهة له
       query = { recipient: req.user._id };
     }
 
+    // 🎯 قمنا بحذف .limit(30) لكي يجلب السيرفر كل الإشعارات القديمة والجديدة
     const notifications = await Notification.find(query)
-      .sort("-createdAt") // الأحدث يظهر أولاً
-      .limit(30) // زودنا الليميت شوية للاحتياط
+      .sort("-createdAt")
       .populate({
         path: "sectorId",
-        select: "name cropType location", // هنا بنجلب اسم القطاع ونوع المحصول ومكانه
+        select: "name cropType location",
       });
 
     res.status(200).json({
