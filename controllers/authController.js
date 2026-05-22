@@ -230,9 +230,17 @@ exports.verifyAndRegister = async (req, res) => {
       isVerified: true,
     });
 
+    // 🔥 الحتة السحرية: توليد توكن تسجيل الدخول الأساسي فوراً للمستخدم الجديد
+    const authToken = jwt.sign(
+      { id: newUser._id },
+      process.env.JWT_SECRET,
+      { expiresIn: "1d" }, // صلاحيته يوم أو حسب نظام سيستمك
+    );
+
     return res.status(201).json({
       success: true,
-      message: "تم تفعيل الحساب بنجاح 🚀",
+      message: "تم تفعيل الحساب ودخولك تلقائياً 🚀",
+      token: authToken, // 👈 بنبعت التوكن هنا عشان الفرونت يمسكه
       user: {
         id: newUser._id,
         email: newUser.email,
