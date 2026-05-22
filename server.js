@@ -22,8 +22,63 @@ const swaggerSpec = require("./swagger");
 
 // 1️⃣ إنشاء تطبيق Express أولاً
 const app = express();
+
+// ============================
+// 🛡️ Middlewares & Security (الترتيب الصحيح والمعدل)
+// ============================
+
+// تشغيل الـ CORS والـ OPTIONS أولاً لضمان عدم رفض أو سقوط أي هيدرز (Authorization)
+app.use(
+  cors({
+    origin: [
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "https://your-frontend-domain.com",
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  }),
+);
+app.options("*", cors());
+
+// الـ Body Parsers والـ Cookie Parser في البداية عشان البيانات تتقرأ فوراً
+app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+app.use(morgan("dev"));
+app.use(helmet());
+app.use(hpp());
+app.use(mongoSanitize());
+
+// 🧹 تعديل دالة الـ HTML Sanitization (XSS Prevention)
+// الفحص يتم فقط لو البيانات مش FormData عشان ما يمسحش أو يبوظ بيانات وملفات الرفع
+app.use((req, res, next) => {
+  if (
+    req.body &&
+    typeof req.body === "object" &&
+    !req.headers["content-type"]?.includes("multipart/form-data")
+  ) {
+    Object.keys(req.body).forEach((key) => {
+      if (typeof req.body[key] === "string") {
+        req.body[key] = sanitizeHtml(req.body[key], {
+          allowedTags: [],
+          allowedAttributes: {},
+        });
+      }
+    });
+  }
+  next();
+});
+
+// Rate Limiter
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: "Too many requests from this IP, please try again after 15 minutes",
+});
+app.use("/api", limiter);
 
 // 2️⃣ إنشاء سيرفر HTTP وربطه بـ Express
 const server = http.createServer(app);
@@ -59,47 +114,6 @@ connectDB();
 // 🛡️ إعدادات Passport
 require("./config/passport")(passport);
 app.use(passport.initialize());
-
-// ============================
-// 🛡️ Security Middlewares
-// ============================
-app.use(helmet());
-app.use(hpp());
-app.use(mongoSanitize());
-app.use(
-  cors({
-    origin: (origin, callback) => callback(null, true), // بيوافق على أي Origin باعت الطلب
-    credentials: true,
-  }),
-);
-app.use(morgan("dev"));
-
-// 🧹 HTML Sanitization (XSS Prevention)
-app.use((req, res, next) => {
-  if (req.body) {
-    Object.keys(req.body).forEach((key) => {
-      if (typeof req.body[key] === "string") {
-        req.body[key] = sanitizeHtml(req.body[key], {
-          allowedTags: [],
-          allowedAttributes: {},
-        });
-      }
-    });
-  }
-  next();
-});
-
-// Rate Limiter
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: "Too many requests from this IP, please try again after 15 minutes",
-});
-app.use("/api", limiter);
-
-// Body Parser
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
 
 // ============================
 // 📂 Static Folders
@@ -155,7 +169,7 @@ app.use((err, req, res, next) => {
 });
 
 // ============================
-// 🚀 Start Server (استخدام server.listen وليس app.listen)
+// 🚀 Start Server
 // ============================
 const PORT = process.env.PORT || 6000;
 server.listen(PORT, () => {
@@ -168,4 +182,5 @@ server.listen(PORT, () => {
     *****************************************
   `);
 });
+
 module.exports = app;
