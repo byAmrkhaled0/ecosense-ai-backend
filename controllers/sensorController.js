@@ -220,6 +220,10 @@ exports.analyzeLastReading = async (req, res) => {
           };
 
           if (io) {
+            // 👇 ضيف السطر ده فوراً فوق الـ Rooms عشان يبعت للكل وتشوفه في شاشتك
+            io.emit("newNotification", socketPayload);
+            console.log("📢 تم بث الإشعار بنجاح للجميع عبر السوكت");
+
             if (finalOwnerId)
               io.to(finalOwnerId.toString()).emit(
                 "newNotification",
@@ -231,7 +235,6 @@ exports.analyzeLastReading = async (req, res) => {
                 socketPayload,
               );
           }
-
           const usersToNotify = await User.find({
             _id: { $in: [finalOwnerId, assignedWorkerId].filter(Boolean) },
           }).select("fcmToken");
