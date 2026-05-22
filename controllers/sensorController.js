@@ -311,19 +311,23 @@ exports.analyzeLastReading = async (req, res) => {
 /* ============================================================
 3️⃣ GET LATEST READING (آخر قراءة محدثة للـ Dashboard)
 ============================================================ */
+
 exports.getLatest = async (req, res) => {
   try {
     const { sectorId } = req.query;
     let filter = {};
 
+    // 1️⃣ 🟢 لو المستخدم عامل (Worker)
     if (req.user.role === "worker") {
+      // جلب القطاعات المسندة للعامل (تأكد من اسم الحقل assignedWorker أو workers)
       const workerSectors = await Sector.find({
-        assignedWorker: req.user._id,
+        assignedWorker: req.user._id, // 👈 لو الـ Schema عندك فيها workers خليها: workers: req.user._id
       }).select("_id");
-      const workerSectorIds = workerSectors.map((s) => s._id);
+
+      const workerSectorIds = workerSectors.map((s) => s._id.toString());
 
       if (sectorId) {
-        if (!workerSectorIds.map((id) => id.toString()).includes(sectorId)) {
+        if (!workerSectorIds.includes(sectorId.toString())) {
           return res.status(403).json({
             success: false,
             message: "غير مسموح لك بالوصول لهذا القطاع",
@@ -333,26 +337,49 @@ exports.getLatest = async (req, res) => {
       } else {
         filter = { sectorId: { $in: workerSectorIds } };
       }
-    } else {
-      filter = sectorId
-        ? { ownerId: req.user._id, sectorId }
-        : { ownerId: req.user._id };
+    }
+    // 2️⃣ 🔵 لو المستخدم مالك (Owner)
+    else if (req.user.role === "owner") {
+      // 🌟 الإصلاح هنا: هنجيب أولاً كل القطاعات المملوكة للمالك ده
+      const ownerSectors = await Sector.find({ ownerId: req.user._id }).select(
+        "_id",
+      );
+      const ownerSectorIds = ownerSectors.map((s) => s._id.toString());
+
+      if (sectorId) {
+        if (!ownerSectorIds.includes(sectorId.toString())) {
+          return res.status(403).json({
+            success: false,
+            message: "هذا القطاع لا ينتمي لحسابك كمالك",
+          });
+        }
+        filter = { sectorId };
+      } else {
+        // لو مش باعت قطاع معين، نجيب أحدث قراءة من أي قطاع يملكه
+        filter = { sectorId: { $in: ownerSectorIds } };
+      }
     }
 
+    // 3️⃣ 📊 جلب أحدث قراءة بناءً على الفلتر المظبوط بالـ sectorId
     const latestData = await SensorData.findOne(filter)
       .sort({ createdAt: -1 })
       .populate("sectorId", "name cropType location")
       .populate("deviceId", "deviceSerial status")
       .lean();
 
+    // لو الفلتر رجع فاضي تماماً
     if (!latestData) {
       return res
         .status(404)
-        .json({ success: false, message: "لا توجد بيانات حالياً" });
+        .json({
+          success: false,
+          message: "لا توجد بيانات مستشعرات حالياً لهذا القطاع",
+        });
     }
 
     res.status(200).json({ success: true, data: latestData });
   } catch (err) {
+    console.error("❌ Error in getLatest:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 };
