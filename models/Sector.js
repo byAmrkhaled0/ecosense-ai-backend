@@ -42,6 +42,7 @@ const sectorSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+    devices: [{ type: mongoose.Schema.Types.ObjectId, ref: "Device" }],
 
     healthStatus: {
       type: String,
