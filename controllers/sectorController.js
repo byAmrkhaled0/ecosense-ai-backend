@@ -27,16 +27,16 @@ exports.getSectors = async (req, res) => {
 
     if (req.user.role === "owner") {
       // المالك يشوف كل القطاعات اللي هو أنشأها
-      query = { ownerId: req.user._id }; // 👈 التعديل هنا
+      query = { ownerId: req.user._id };
     } else if (req.user.role === "worker") {
       // العامل يشوف فقط القطاعات اللي هو متسجل فيها كـ assignedWorker
       query = { assignedWorker: req.user._id };
     }
 
-    const sectors = await Sector.find(query).populate(
-      "assignedWorker",
-      "firstName lastName phoneNumber",
-    );
+    // 🚀 التعديل هنا: عملنا populate لـ assignedWorker وكمان للـ devices
+    const sectors = await Sector.find(query)
+      .populate("assignedWorker", "firstName lastName phoneNumber")
+      .populate("devices"); // 👈 هيسحب كل بيانات الأجهزة المربوطة بالقطاع (منها الـ deviceSerial)
 
     res.status(200).json({
       success: true,
