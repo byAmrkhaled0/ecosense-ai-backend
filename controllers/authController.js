@@ -329,7 +329,8 @@ exports.socialAuthSuccess = async (req, res) => {
     const user = req.user;
 
     // حدد رابط الفرونت إند بتاعك (محلي أو المرفوع على المخدم)
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const frontendUrl =
+      process.env.FRONTEND_URL || "https://ecosensedabab.netlify.app";
 
     if (!user) {
       // لو مفيش مستخدم رجعه لصفحة اللوجن مع رسالة خطأ في الرابط
@@ -345,7 +346,8 @@ exports.socialAuthSuccess = async (req, res) => {
     return res.redirect(`${frontendUrl}/login?token=${token}`);
   } catch (err) {
     console.error("Social Auth Success Error:", err.message);
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    const frontendUrl =
+      process.env.FRONTEND_URL || "https://ecosensedabab.netlify.app";
     return res.redirect(`${frontendUrl}/login?error=server_error`);
   }
 };
