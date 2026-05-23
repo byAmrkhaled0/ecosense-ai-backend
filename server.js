@@ -33,7 +33,7 @@ app.use(
     origin: [
       "http://localhost:3000",
       "http://localhost:5173",
-      "https://ecosensedabab.netlify.app/", // 👈 تذكر تغيير هذا الدومين لرابط الـ الفرونت النهائي
+      "https://ecosensedabab.netlify.app", // 👈 تذكر تغيير هذا الدومين لرابط الـ الفرونت النهائي
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -88,7 +88,7 @@ const io = new Server(server, {
     origin: [
       "http://localhost:3000",
       "http://localhost:5173",
-      "https://ecosensedabab.netlify.app/",
+      "https://ecosensedabab.netlify.app",
     ],
     credentials: true,
   },

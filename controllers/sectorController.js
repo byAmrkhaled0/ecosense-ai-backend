@@ -48,7 +48,7 @@ exports.getSectors = async (req, res) => {
   }
 };
 
-// @desc    تعديل بيانات قطاع (للمالك فقط) - [PUT]
+// @desc    تعديل بيانات قطاع (للمالك فقط) - [PUT ]
 exports.updateSector = async (req, res) => {
   try {
     let sector = await Sector.findById(req.params.id);
