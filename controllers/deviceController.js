@@ -6,6 +6,7 @@ exports.registerDevice = async (req, res) => {
   try {
     const { deviceSerial, deviceName, sectorId } = req.body;
 
+    // 1. التحقق من أن الجهاز مش مسجل قبل كده
     const existingDevice = await Device.findOne({ deviceSerial });
     if (existingDevice) {
       return res.status(400).json({
@@ -14,6 +15,7 @@ exports.registerDevice = async (req, res) => {
       });
     }
 
+    // 2. إنشاء الجهاز في موديل الـ Device
     const device = await Device.create({
       deviceSerial,
       deviceName: deviceName || "Smart Node",
@@ -22,9 +24,16 @@ exports.registerDevice = async (req, res) => {
       status: "offline",
     });
 
+    // 🚀 3. التعديل الجديد: تحديث مصفوفة الـ devices جوه القطاع (Sector) فوراً
+    await Sector.findByIdAndUpdate(
+      sectorId,
+      { $push: { devices: device._id } }, // دفع الـ ID بتاع الجهاز الجديد هنا
+      { new: true }, // للتأكد من إتمام العملية وتحديث الداتا
+    );
+
     res.status(201).json({
       success: true,
-      message: "تم تسجيل الجهاز بنجاح",
+      message: "تم تسجيل الجهاز بنجاح وربطه بالقطاع",
       data: device,
     });
   } catch (err) {

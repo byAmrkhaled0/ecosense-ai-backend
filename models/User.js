@@ -15,13 +15,15 @@ const userSchema = new mongoose.Schema({
   },
   address: {
     type: String,
-    required: [true, "Please add an address"],
+    // شيلنا الـ required عشان جوجل login يعدي
+    trim: true,
   },
   phoneNumber: {
     type: String,
-    required: [true, "Please add a phone number"],
+    // شيلنا الـ required
     unique: true,
-    match: [/^\+?\d{10,15}$/, "Please add a valid phone number"],
+    sparse: true, // 👈 دي أهم كلمة! بتخلي المونجو يتجاهل الـ unique لو الحقل مش مبعوت أصلاً
+    trim: true,
   },
   email: {
     type: String,
