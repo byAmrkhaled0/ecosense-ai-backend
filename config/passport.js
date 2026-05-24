@@ -31,16 +31,13 @@ module.exports = function (passport) {
           // لو المستخدم جديد، انشئه بالبيانات اللي جاية من جوجل مباشرة
           user = await User.create({
             email,
-            // جوجل بتبعت الاسم الأول والأخير جاهزين هنا
             firstName: profile.name.givenName || "Google",
             lastName: profile.name.familyName || "User",
             provider: "google",
             googleId: profile.id,
-            role: "owner", // افتراضياً أي حد يسجل بجوجل هو صاحب مزرعة
+            role: "owner",
             isVerified: true,
-            address: "Social Account",
-            phoneNumber: "0000000000",
-            // بنحط باسوورد عشوائي عشان الموديل ميعملش Validation error
+            // ❌ شيلنا الـ address والـ phoneNumber من هنا تماماً ليكونوا undefined/null في الداتابيز
             password: Math.random().toString(36).slice(-10),
           });
 
