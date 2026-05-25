@@ -36,7 +36,7 @@ const sendFirebasePush = async (user, title, message) => {
 };
 
 /* ============================================================
-    1️⃣ UPLOAD & AI ANALYZE (نسخة Cloudinary المعدلة)
+    1️⃣ UPLOAD & AI ANALYZE (نسخة الرفع والتعرف بالسيريال أو القطاع)
 ============================================================ */
 exports.uploadImage = async (req, res) => {
   try {
@@ -53,17 +53,16 @@ exports.uploadImage = async (req, res) => {
       return res.status(400).json({ success: false, message: "يرجى رفع صورة" });
     }
 
-    // ✅ الحصول على رابط الصورة مباشرة من Cloudinary عبر الـ Multer-Storage
     const imageUrl = req.file.path;
 
-    // --- حالة 1: تصوير آلي (IoT - ESP32-CAM) ---
-    if (deviceSerial) {
+    // 🎯 حالة 1: الـ deviceSerial مبعوتة صراحة (من الـ ESP32-CAM أو ممررة من الفرونت إند)
+    if (deviceSerial && deviceSerial !== "ESP32-GENERIC-UNIT") {
       device = await Device.findOne({ deviceSerial }).populate("sectorId");
 
       if (!device || !device.sectorId) {
         return res.status(404).json({
           success: false,
-          message: "هذا الجهاز غير مسجل أو غير مربوط بقطاع زراعي",
+          message: "هذا الجهاز غير مسجل أو غير مربوط بقطاع زراعي متاح",
         });
       }
 
@@ -74,46 +73,34 @@ exports.uploadImage = async (req, res) => {
       uploadedBy = null;
       captureReason = "Automatic Camera";
     }
-
-    // --- حالة 2: تصوير يدوي (Mobile App / Web Dashboard) ---
-    else if (req.user) {
-      if (!sectorId) {
-        return res
-          .status(400)
-          .json({ success: false, message: "sectorId مطلوب للفحص اليدوي" });
-      }
-
-      // 🔒 تعديل أمني: البحث عن القطاع بشرط أن يكون المستخدم هو صاحب المزرعة أو العامل المسؤول
-      const sector = await Sector.findOne({
-        _id: sectorId,
-        $or: [{ ownerId: req.user._id }, { assignedWorker: req.user._id }],
-      });
-
+    // 🌿 حالة 2: التعرف الذكي عن طريق الـ sectorId (الرفع اليدوي من العامل أو المالك)
+    else if (sectorId) {
+      const sector = await Sector.findById(sectorId);
       if (!sector) {
-        return res.status(403).json({
-          success: false,
-          message: "القطاع غير موجود أو ليس لديك صلاحية للرفع فيه",
-        });
+        return res
+          .status(404)
+          .json({
+            success: false,
+            message: "القطاع المختار غير موجود بالنظام",
+          });
       }
 
-      // 🚀 التعديل المطلوب: جلب الجهاز المرتبط بهذا القطاع بالخفاء لتحديد الـ deviceId والسيريال تلقائيًا
+      // البحث عن أي جهاز IoT مسجل ومربوط بهذا القطاع تلقائياً بالخلفية
       device = await Device.findOne({ sectorId: sector._id });
-      if (!device) {
-        console.log(
-          `⚠️ تنبيه: القطاع [${sector._id}] لا يحتوي على جهاز IoT مسجل حالياً.`,
-        );
-      }
 
       finalSectorId = sector._id;
       finalOwnerId = sector.ownerId;
       finalWorkerId = sector.assignedWorker;
       cropType = sector.cropType || "Unknown";
-      uploadedBy = req.user._id;
+      uploadedBy = sector.ownerId; // تعيين المالك كمسؤول افتراضي عن الرفع اليدوي للتقرير
       captureReason = "Manual Scan";
-    } else {
-      return res.status(401).json({
+    }
+    // ⚠️ حالة 3: لو الطلب ناقص تماماً ولم يرسل أي معرفات
+    else {
+      return res.status(400).json({
         success: false,
-        message: "يجب توفير Serial الجهاز أو Token المستخدم",
+        message:
+          "يجب تزويد السيرفر بـ deviceSerial أو معرف القطاع sectorId لإتمام العملية",
       });
     }
 
@@ -127,8 +114,6 @@ exports.uploadImage = async (req, res) => {
 
     try {
       const formData = new FormData();
-
-      // ✅ إرسال الصورة لسيرفر عمرو (تحميلها من Cloudinary كـ Stream)
       const imageResponse = await axios.get(imageUrl, {
         responseType: "stream",
       });
@@ -137,7 +122,6 @@ exports.uploadImage = async (req, res) => {
         filename: req.file.originalname,
         contentType: req.file.mimetype,
       });
-
       formData.append("cropType", cropType);
 
       const aiResponse = await axios.post(
@@ -148,7 +132,7 @@ exports.uploadImage = async (req, res) => {
             ...formData.getHeaders(),
             "ngrok-skip-browser-warning": "true",
           },
-          timeout: 20000, // مهلة كافية للمعالجة السحابية والـ AI
+          timeout: 20000,
         },
       );
 
@@ -178,18 +162,18 @@ exports.uploadImage = async (req, res) => {
       console.log("⚠️ Image AI Server Error:", aiErr.message);
     }
 
-    // ✨ حفظ السجل في الداتابيز (الآن الـ deviceId هينزل تلقائياً حتى لو الرفع يدوي)
+    // حفظ السجل في الداتابيز
     const newImageLog = await ImageLog.create({
       ownerId: finalOwnerId,
       sectorId: finalSectorId,
-      imageUrl: imageUrl, // رابط الصورة المرفوعة على Cloudinary
-      capturedBy: uploadedBy || finalOwnerId,
+      imageUrl: imageUrl,
+      capturedBy: uploadedBy,
       analysisResult: aiAnalysis,
-      deviceId: device ? device._id : null, // بربط الصورة بالـ IoT device تلقائياً بالخلفية
+      deviceId: device ? device._id : null, // ربط السجل بالجهاز المكتشف تلقائياً إن وُجد
       captureReason: captureReason,
     });
 
-    // 4️⃣ الإشعارات الفورية والـ Real-time
+    // 4️⃣ الإشعارات الفورية والـ Socket.io
     if (aiAnalysis.status !== "Healthy") {
       const io = req.app.get("io");
       const title = "🚨 تنبيه صحة النبات";
@@ -201,8 +185,10 @@ exports.uploadImage = async (req, res) => {
       const owner = await User.findById(finalOwnerId);
       const worker = finalWorkerId ? await User.findById(finalWorkerId) : null;
 
-      await sendFirebasePush(owner, title, message);
-      if (worker) await sendFirebasePush(worker, title, message);
+      if (typeof sendFirebasePush === "function") {
+        if (owner) await sendFirebasePush(owner, title, message);
+        if (worker) await sendFirebasePush(worker, title, message);
+      }
 
       const notificationData = {
         title,
