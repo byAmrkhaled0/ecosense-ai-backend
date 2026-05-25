@@ -1,12 +1,29 @@
 const Device = require("../models/Device");
-const SensorData = require("../models/SensorData"); // 👈 لازم تستورد موديل البيانات
+const SensorData = require("../models/SensorData");
+const mongoose = require("mongoose"); // 👈 لازم تستورد موديل البيانات
 
 // @desc    تسجيل جهاز جديد وربطه بقطاع
 exports.registerDevice = async (req, res) => {
   try {
     const { deviceSerial, deviceName, sectorId } = req.body;
 
-    // 1. التحقق من أن الجهاز مش مسجل قبل كده
+    // 1️⃣ التحقق من المدخلات الأساسية وتجنب الـ ObjectId المشوه
+    if (!deviceSerial || !deviceSerial.trim()) {
+      return res
+        .status(400)
+        .json({ success: false, message: "الرقم التسلسلي للجهاز مطلوب" });
+    }
+
+    if (!sectorId || !mongoose.Types.ObjectId.isValid(sectorId)) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "معرف القطاع (Sector ID) غير صحيح أو غير موجود",
+        });
+    }
+
+    // 2️⃣ التحقق من أن الجهاز مش مسجل قبل كده
     const existingDevice = await Device.findOne({ deviceSerial });
     if (existingDevice) {
       return res.status(400).json({
@@ -15,32 +32,54 @@ exports.registerDevice = async (req, res) => {
       });
     }
 
-    // 2. إنشاء الجهاز في موديل الـ Device
+    // 3️⃣ التأكد أن القطاع موجود فعلاً وينتمي للمستخدم الحالي قبل التعديل عليه
+    const sectorExists = await Sector.findById(sectorId);
+    if (!sectorExists) {
+      return res
+        .status(404)
+        .json({
+          success: false,
+          message: "القطاع المختار غير موجود في النظام",
+        });
+    }
+
+    // 4️⃣ إنشاء الجهاز في موديل الـ Device
     const device = await Device.create({
       deviceSerial,
       deviceName: deviceName || "Smart Node",
       sectorId,
-      ownerId: req.user._id,
+      ownerId: req.user._id, // تأكد أن الـ Auth Middleware بيمرر الـ user صح
       status: "offline",
     });
 
-    // 🚀 3. التعديل الجديد: تحديث مصفوفة الـ devices جوه القطاع (Sector) فوراً
+    // 5️⃣ تحديث مصفوفة الـ devices جوه القطاع (Sector) فوراً
     await Sector.findByIdAndUpdate(
       sectorId,
-      { $push: { devices: device._id } }, // دفع الـ ID بتاع الجهاز الجديد هنا
-      { new: true }, // للتأكد من إتمام العملية وتحديث الداتا
+      { $push: { devices: device._id } },
+      { new: true },
     );
 
-    res.status(201).json({
+    // 6️⃣ خطوة الأمان للفرونت إند: جلب الجهاز بالـ populate عشان الـ Table يقراه فوراً
+    const populatedDevice = await Device.findById(device._id)
+      .populate("sectorId", "name")
+      .lean();
+
+    // 7️⃣ الرد بالنجاح الصريح
+    return res.status(201).json({
       success: true,
-      message: "تم تسجيل الجهاز بنجاح وربطه بالقطاع",
-      data: device,
+      message: "تم تسجيل الجهاز بنجاح وربطه بالقطاع 🎉",
+      data: populatedDevice,
     });
   } catch (err) {
-    res.status(400).json({ success: false, error: err.message });
+    console.error("❌ Error in registerDevice Backend:", err.message);
+
+    // ✅ تعديل جوهري: إرجاع الـ حقل كـ message ليتوافق مع الـ Toast في الفرونت إند
+    return res.status(500).json({
+      success: false,
+      message: err.message || "حدث خطأ غير متوقع أثناء تسجيل الجهاز",
+    });
   }
 };
-
 // @desc    جلب حالة الأجهزة في المزرعة
 exports.getDevices = async (req, res) => {
   try {
