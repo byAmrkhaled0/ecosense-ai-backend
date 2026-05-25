@@ -53,7 +53,7 @@ exports.uploadImage = async (req, res) => {
       return res.status(400).json({ success: false, message: "يرجى رفع صورة" });
     }
 
-    // ✅ التعديل: الحصول على رابط الصورة مباشرة من Cloudinary
+    // ✅ الحصول على رابط الصورة مباشرة من Cloudinary عبر الـ Multer-Storage
     const imageUrl = req.file.path;
 
     // --- حالة 1: تصوير آلي (IoT - ESP32-CAM) ---
@@ -74,13 +74,14 @@ exports.uploadImage = async (req, res) => {
       uploadedBy = null;
       captureReason = "Automatic Camera";
     }
-    // --- حالة 2: تصوير يدوي (Mobile App) ---
-    // --- حالة 2: تصوير يدوي (Mobile App) ---
+
+    // --- حالة 2: تصوير يدوي (Mobile App / Web Dashboard) ---
     else if (req.user) {
-      if (!sectorId)
+      if (!sectorId) {
         return res
           .status(400)
           .json({ success: false, message: "sectorId مطلوب للفحص اليدوي" });
+      }
 
       // 🔒 تعديل أمني: البحث عن القطاع بشرط أن يكون المستخدم هو صاحب المزرعة أو العامل المسؤول
       const sector = await Sector.findOne({
@@ -88,13 +89,20 @@ exports.uploadImage = async (req, res) => {
         $or: [{ ownerId: req.user._id }, { assignedWorker: req.user._id }],
       });
 
-      if (!sector)
-        return res
-          .status(403)
-          .json({
-            success: false,
-            message: "القطاع غير موجود أو ليس لديك صلاحية للرفع فيه",
-          });
+      if (!sector) {
+        return res.status(403).json({
+          success: false,
+          message: "القطاع غير موجود أو ليس لديك صلاحية للرفع فيه",
+        });
+      }
+
+      // 🚀 التعديل المطلوب: جلب الجهاز المرتبط بهذا القطاع بالخفاء لتحديد الـ deviceId والسيريال تلقائيًا
+      device = await Device.findOne({ sectorId: sector._id });
+      if (!device) {
+        console.log(
+          `⚠️ تنبيه: القطاع [${sector._id}] لا يحتوي على جهاز IoT مسجل حالياً.`,
+        );
+      }
 
       finalSectorId = sector._id;
       finalOwnerId = sector.ownerId;
@@ -120,7 +128,7 @@ exports.uploadImage = async (req, res) => {
     try {
       const formData = new FormData();
 
-      // ✅ التعديل: إرسال الصورة لسيرفر عمرو (تحميلها من Cloudinary كـ Stream)
+      // ✅ إرسال الصورة لسيرفر عمرو (تحميلها من Cloudinary كـ Stream)
       const imageResponse = await axios.get(imageUrl, {
         responseType: "stream",
       });
@@ -140,7 +148,7 @@ exports.uploadImage = async (req, res) => {
             ...formData.getHeaders(),
             "ngrok-skip-browser-warning": "true",
           },
-          timeout: 20000, // زيادة المهلة قليلاً للمعالجة السحابية
+          timeout: 20000, // مهلة كافية للمعالجة السحابية والـ AI
         },
       );
 
@@ -170,18 +178,18 @@ exports.uploadImage = async (req, res) => {
       console.log("⚠️ Image AI Server Error:", aiErr.message);
     }
 
-    // حفظ السجل في الداتابيز
+    // ✨ حفظ السجل في الداتابيز (الآن الـ deviceId هينزل تلقائياً حتى لو الرفع يدوي)
     const newImageLog = await ImageLog.create({
       ownerId: finalOwnerId,
       sectorId: finalSectorId,
-      imageUrl: imageUrl, // رابط Cloudinary
+      imageUrl: imageUrl, // رابط الصورة المرفوعة على Cloudinary
       capturedBy: uploadedBy || finalOwnerId,
       analysisResult: aiAnalysis,
-      deviceId: device?._id,
+      deviceId: device ? device._id : null, // بربط الصورة بالـ IoT device تلقائياً بالخلفية
       captureReason: captureReason,
     });
 
-    // 4️⃣ الإشعارات
+    // 4️⃣ الإشعارات الفورية والـ Real-time
     if (aiAnalysis.status !== "Healthy") {
       const io = req.app.get("io");
       const title = "🚨 تنبيه صحة النبات";
@@ -203,28 +211,31 @@ exports.uploadImage = async (req, res) => {
         sectorId: finalSectorId,
       };
 
-      const nOwner = await Notification.create({
-        ...notificationData,
-        recipient: finalOwnerId,
-      });
-      io.to(finalOwnerId.toString()).emit("newNotification", nOwner);
+      if (finalOwnerId) {
+        const nOwner = await Notification.create({
+          ...notificationData,
+          recipient: finalOwnerId,
+        });
+        if (io) io.to(finalOwnerId.toString()).emit("newNotification", nOwner);
+      }
 
       if (finalWorkerId) {
         const nWorker = await Notification.create({
           ...notificationData,
           recipient: finalWorkerId,
         });
-        io.to(finalWorkerId.toString()).emit("newNotification", nWorker);
+        if (io)
+          io.to(finalWorkerId.toString()).emit("newNotification", nWorker);
       }
     }
 
-    res.status(201).json({ success: true, data: newImageLog });
+    return res.status(201).json({ success: true, data: newImageLog });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    console.error("❌ Error in uploadImage Controller:", err.message);
+    return res.status(500).json({ success: false, error: err.message });
   }
 };
-
-/* ============================================================
+/*======================================
     2️⃣ GET IMAGE HISTORY (عرض التاريخ)
 ============================================================ */
 exports.getImageHistory = async (req, res) => {
