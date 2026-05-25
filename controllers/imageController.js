@@ -77,12 +77,10 @@ exports.uploadImage = async (req, res) => {
     else if (sectorId) {
       const sector = await Sector.findById(sectorId);
       if (!sector) {
-        return res
-          .status(404)
-          .json({
-            success: false,
-            message: "القطاع المختار غير موجود بالنظام",
-          });
+        return res.status(404).json({
+          success: false,
+          message: "القطاع المختار غير موجود بالنظام",
+        });
       }
 
       // البحث عن أي جهاز IoT مسجل ومربوط بهذا القطاع تلقائياً بالخلفية
@@ -167,7 +165,7 @@ exports.uploadImage = async (req, res) => {
       ownerId: finalOwnerId,
       sectorId: finalSectorId,
       imageUrl: imageUrl,
-      capturedBy: uploadedBy,
+      capturedBy: uploadedBy || finalOwnerId,
       analysisResult: aiAnalysis,
       deviceId: device ? device._id : null, // ربط السجل بالجهاز المكتشف تلقائياً إن وُجد
       captureReason: captureReason,
