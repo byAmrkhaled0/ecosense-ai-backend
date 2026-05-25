@@ -1,6 +1,7 @@
 const Device = require("../models/Device");
 const SensorData = require("../models/SensorData");
-const mongoose = require("mongoose"); // 👈 لازم تستورد موديل البيانات
+const mongoose = require("mongoose");
+const Sector = require("../models/Sector"); // 👈 لازم تستورد موديل البيانات
 
 // @desc    تسجيل جهاز جديد وربطه بقطاع
 exports.registerDevice = async (req, res) => {
@@ -15,12 +16,10 @@ exports.registerDevice = async (req, res) => {
     }
 
     if (!sectorId || !mongoose.Types.ObjectId.isValid(sectorId)) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "معرف القطاع (Sector ID) غير صحيح أو غير موجود",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "معرف القطاع (Sector ID) غير صحيح أو غير موجود",
+      });
     }
 
     // 2️⃣ التحقق من أن الجهاز مش مسجل قبل كده
@@ -35,12 +34,10 @@ exports.registerDevice = async (req, res) => {
     // 3️⃣ التأكد أن القطاع موجود فعلاً وينتمي للمستخدم الحالي قبل التعديل عليه
     const sectorExists = await Sector.findById(sectorId);
     if (!sectorExists) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: "القطاع المختار غير موجود في النظام",
-        });
+      return res.status(404).json({
+        success: false,
+        message: "القطاع المختار غير موجود في النظام",
+      });
     }
 
     // 4️⃣ إنشاء الجهاز في موديل الـ Device
