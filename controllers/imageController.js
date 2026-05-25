@@ -75,17 +75,26 @@ exports.uploadImage = async (req, res) => {
       captureReason = "Automatic Camera";
     }
     // --- حالة 2: تصوير يدوي (Mobile App) ---
+    // --- حالة 2: تصوير يدوي (Mobile App) ---
     else if (req.user) {
       if (!sectorId)
         return res
           .status(400)
           .json({ success: false, message: "sectorId مطلوب للفحص اليدوي" });
 
-      const sector = await Sector.findById(sectorId);
+      // 🔒 تعديل أمني: البحث عن القطاع بشرط أن يكون المستخدم هو صاحب المزرعة أو العامل المسؤول
+      const sector = await Sector.findOne({
+        _id: sectorId,
+        $or: [{ ownerId: req.user._id }, { assignedWorker: req.user._id }],
+      });
+
       if (!sector)
         return res
-          .status(404)
-          .json({ success: false, message: "القطاع غير موجود" });
+          .status(403)
+          .json({
+            success: false,
+            message: "القطاع غير موجود أو ليس لديك صلاحية للرفع فيه",
+          });
 
       finalSectorId = sector._id;
       finalOwnerId = sector.ownerId;
@@ -223,13 +232,17 @@ exports.getImageHistory = async (req, res) => {
     const { sectorId, page = 1, limit = 10 } = req.query;
     let filter = {};
 
+    // 1. لو المستخدم عامل (Worker)
     if (req.user.role === "worker") {
+      // هنجيب كل القطاعات المسؤول عنها العامل ده
       const workerSectors = await Sector.find({
         assignedWorker: req.user._id,
       }).select("_id");
+
       const sectorIds = workerSectors.map((s) => s._id);
 
       if (sectorId) {
+        // التأكد إن العامل له صلاحية على القطاع اللي طالبه
         if (!sectorIds.map((id) => id.toString()).includes(sectorId)) {
           return res
             .status(403)
@@ -237,19 +250,39 @@ exports.getImageHistory = async (req, res) => {
         }
         filter.sectorId = sectorId;
       } else {
+        // لو مطلقش قطاع معين، هات صور كل قطاعاته
         filter.sectorId = { $in: sectorIds };
       }
-    } else {
-      filter.ownerId = req.user._id;
-      if (sectorId) filter.sectorId = sectorId;
+    }
+    // 2. لو المستخدم صاحب المزرعة (Owner) أو Admin
+    else {
+      // عشان تجيب "كل اللي رفع في القطاع"، هنجيب الأول كل القطاعات بتاعة الـ Owner ده
+      const ownerSectors = await Sector.find({ ownerId: req.user._id }).select(
+        "_id",
+      );
+      const ownerSectorIds = ownerSectors.map((s) => s._id);
+
+      if (sectorId) {
+        // لو طالب قطاع معين، اتأكد إنه بتاعه
+        if (!ownerSectorIds.map((id) => id.toString()).includes(sectorId)) {
+          return res
+            .status(403)
+            .json({ success: false, message: "هذا القطاع لا ينتمي لمزرعتك" });
+        }
+        filter.sectorId = sectorId;
+      } else {
+        // لو مبعتش قطاع معين، يعرض كل صور القطاعات المملوكة للـ Owner ده (اللي رفعها هو أو عماله)
+        filter.sectorId = { $in: ownerSectorIds };
+      }
     }
 
+    // التنفيذ وجلب البيانات مع الـ Pagination
     const images = await ImageLog.find(filter)
       .sort({ createdAt: -1 })
       .skip((page - 1) * Number(limit))
       .limit(Number(limit))
       .populate("sectorId", "name cropType")
-      .populate("capturedBy", "firstName lastName")
+      .populate("capturedBy", "firstName lastName role") // ضفنا الـ role عشان تعرف مين اللي رفعها في الفرونت إند
       .lean();
 
     const total = await ImageLog.countDocuments(filter);
@@ -257,13 +290,14 @@ exports.getImageHistory = async (req, res) => {
     res.status(200).json({
       success: true,
       totalRecords: total,
+      currentPage: Number(page),
+      totalPages: Math.ceil(total / Number(limit)),
       data: images,
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 };
-
 /* ============================================================
     3️⃣ DELETE IMAGE LOG (حذف الصورة من Cloudinary والداتابيز)
 ============================================================ */

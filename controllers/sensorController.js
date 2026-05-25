@@ -9,7 +9,7 @@ const Notification = require("../models/Notification");
 const User = require("../models/User");
 
 /* ============================================================
-   HELPERS (التنسيق لمتطلبات الـ AI)
+    HELPERS (التنسيق لمتطلبات الـ AI)
    ============================================================ */
 
 // 🛠️ دالة مساعدة لتنظيف وتوحيد أسماء المحاصيل قبل إرسالها للـ AI
@@ -38,7 +38,7 @@ const formatLightValue = (light) => {
 };
 
 /* ============================================================ 
-   1️⃣ مسار استقبال بيانات الحساسات (خاص بالجهاز فقط ⚡ FormData)
+    1️⃣ مسار استقبال بيانات الحساسات (خاص بالجهاز فقط ⚡ FormData)
    ============================================================ */
 exports.uploadDataOnly = async (req, res) => {
   try {
@@ -65,7 +65,9 @@ exports.uploadDataOnly = async (req, res) => {
     }
 
     const sector = device.sectorId;
-    const finalOwnerId = device.ownerId || sector.ownerId;
+
+    // ✅ تعديل: ضمان ربط القراءة بصاحب المزرعة الحقيقي من خلال القطاع مباشرة
+    const finalOwnerId = sector.ownerId;
 
     // تحديث حالة الجهاز لـ online وتسجيل وقت التفاعل فوراً
     await Device.findByIdAndUpdate(device._id, {
@@ -100,7 +102,7 @@ exports.uploadDataOnly = async (req, res) => {
 };
 
 /* ============================================================ 
-   2️⃣ مسار طلب التحليل من الـ AI (يطلبه الويب أو الفلاتر 🧠 المحمي بتوكن)
+    2️⃣ مسار طلب التحليل من الـ AI (يطلبه الويب أو الفلاتر 🧠 المحمي بتوكن)
    ============================================================ */
 exports.analyzeLastReading = async (req, res) => {
   try {
@@ -211,38 +213,33 @@ exports.analyzeLastReading = async (req, res) => {
           currentStatus.includes("حرجة") ||
           currentStatus.includes("خطر");
 
-        // 🚨 جهزنا الـ Payload برا الـ if لضمان استخدامه في البث العام
         const io = req.app.get("io");
         const socketPayload = {
-          title: "🚨 تنبيه خطر فوري",
+          title: "🚨 تنبيه صحة النبات",
           message: `القطاع: ${sector.name} | الحالة: ${currentStatus} | حرارة: ${lastReading.air.temperature}°C`,
           sectorId: sector._id,
           createdAt: new Date(),
         };
 
         if (io) {
-          // 🔥 تعديل الأمان: البث العام بره الـ if الحرجة لضمان وصوله للشاشة حالاً أثناء التجربة!
-          io.emit("newNotification", socketPayload);
+          // ✅ تعديل: البث المباشر الموجه للغرف (Rooms) الخاصة بأصحاب الشأن فقط منعاً للتداخل بين المزارع
+          if (finalOwnerId)
+            io.to(finalOwnerId.toString()).emit(
+              "newNotification",
+              socketPayload,
+            );
+          if (assignedWorkerId)
+            io.to(assignedWorkerId.toString()).emit(
+              "newNotification",
+              socketPayload,
+            );
           console.log(
-            "📢 [Socket Global] تم بث الإشعار بنجاح للجميع بره شروط الـ if",
+            "📢 [Socket Rooms] تم بث الإشعار بنجاح لأصحاب القطاع فقط حالاً بره الـ if",
           );
         }
 
         // الحفاظ على المنطق القديم لحفظ الداتابيز وإرسال الهاتف لو حرج فعلياً
         if (isCritical) {
-          if (io) {
-            if (finalOwnerId)
-              io.to(finalOwnerId.toString()).emit(
-                "newNotification",
-                socketPayload,
-              );
-            if (assignedWorkerId)
-              io.to(assignedWorkerId.toString()).emit(
-                "newNotification",
-                socketPayload,
-              );
-          }
-
           const usersToNotify = await User.find({
             _id: { $in: [finalOwnerId, assignedWorkerId].filter(Boolean) },
           }).select("fcmToken");
@@ -255,7 +252,7 @@ exports.analyzeLastReading = async (req, res) => {
                   {
                     to: user.fcmToken,
                     notification: {
-                      title: socketPayload.title,
+                      title: "🚨 تنبيه خطر فوري", // عنوان حرج للإشعار الخارجي
                       body: socketPayload.message,
                       sound: "default",
                     },
@@ -279,7 +276,7 @@ exports.analyzeLastReading = async (req, res) => {
             {
               recipient: finalOwnerId,
               sectorId: sector._id,
-              title: socketPayload.title,
+              title: "🚨 تنبيه خطر فوري",
               message: socketPayload.message,
               type: "warning",
             },
@@ -289,7 +286,7 @@ exports.analyzeLastReading = async (req, res) => {
             notificationsToSave.push({
               recipient: assignedWorkerId,
               sectorId: sector._id,
-              title: socketPayload.title,
+              title: "🚨 تنبيه خطر فوري",
               message: socketPayload.message,
               type: "warning",
             });
@@ -308,10 +305,10 @@ exports.analyzeLastReading = async (req, res) => {
     }
   }
 };
-/* ============================================================
-3️⃣ GET LATEST READING (آخر قراءة محدثة للـ Dashboard)
-============================================================ */
 
+/* ============================================================
+    3️⃣ GET LATEST READING (آخر قراءة محدثة للـ Dashboard)
+   ============================================================ */
 exports.getLatest = async (req, res) => {
   try {
     const { sectorId } = req.query;
@@ -319,9 +316,8 @@ exports.getLatest = async (req, res) => {
 
     // 1️⃣ 🟢 لو المستخدم عامل (Worker)
     if (req.user.role === "worker") {
-      // جلب القطاعات المسندة للعامل (تأكد من اسم الحقل assignedWorker أو workers)
       const workerSectors = await Sector.find({
-        assignedWorker: req.user._id, // 👈 لو الـ Schema عندك فيها workers خليها: workers: req.user._id
+        assignedWorker: req.user._id,
       }).select("_id");
 
       const workerSectorIds = workerSectors.map((s) => s._id.toString());
@@ -340,7 +336,6 @@ exports.getLatest = async (req, res) => {
     }
     // 2️⃣ 🔵 لو المستخدم مالك (Owner)
     else if (req.user.role === "owner") {
-      // 🌟 الإصلاح هنا: هنجيب أولاً كل القطاعات المملوكة للمالك ده
       const ownerSectors = await Sector.find({ ownerId: req.user._id }).select(
         "_id",
       );
@@ -355,7 +350,6 @@ exports.getLatest = async (req, res) => {
         }
         filter = { sectorId };
       } else {
-        // لو مش باعت قطاع معين، نجيب أحدث قراءة من أي قطاع يملكه
         filter = { sectorId: { $in: ownerSectorIds } };
       }
     }
@@ -367,14 +361,11 @@ exports.getLatest = async (req, res) => {
       .populate("deviceId", "deviceSerial status")
       .lean();
 
-    // لو الفلتر رجع فاضي تماماً
     if (!latestData) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: "لا توجد بيانات مستشعرات حالياً لهذا القطاع",
-        });
+      return res.status(404).json({
+        success: false,
+        message: "لا توجد بيانات مستشعرات حالياً لهذا القطاع",
+      });
     }
 
     res.status(200).json({ success: true, data: latestData });
@@ -385,8 +376,8 @@ exports.getLatest = async (req, res) => {
 };
 
 /* ============================================================
-4️⃣ GET HISTORY (سجل البيانات مع الفلترة)
-============================================================ */
+    4️⃣ GET HISTORY (سجل البيانات مع الفلترة)
+   ============================================================ */
 exports.getHistory = async (req, res) => {
   try {
     const {
@@ -400,6 +391,7 @@ exports.getHistory = async (req, res) => {
 
     let filter = {};
 
+    // 1️⃣ 🟢 لو المستخدم عامل (Worker)
     if (req.user.role === "worker") {
       const workerSectors = await Sector.find({
         assignedWorker: req.user._id,
@@ -416,9 +408,28 @@ exports.getHistory = async (req, res) => {
       } else {
         filter.sectorId = { $in: workerSectorIds };
       }
-    } else {
-      filter.ownerId = req.user._id;
-      if (sectorId) filter.sectorId = sectorId;
+    }
+    // 2️⃣ 🔵 ✅ تعديل: لو المستخدم مالك (Owner) - الفلترة بقطاعاته لضمان ظهور الداتا بالكامل
+    else {
+      const ownerSectors = await Sector.find({ ownerId: req.user._id }).select(
+        "_id",
+      );
+      const ownerSectorIds = ownerSectors.map((s) => s._id);
+
+      if (sectorId) {
+        if (
+          !ownerSectorIds
+            .map((id) => id.toString())
+            .includes(sectorId.toString())
+        ) {
+          return res
+            .status(403)
+            .json({ success: false, message: "هذا القطاع لا ينتمي لمزرعتك" });
+        }
+        filter.sectorId = sectorId;
+      } else {
+        filter.sectorId = { $in: ownerSectorIds };
+      }
     }
 
     if (status) filter["analysis.status"] = status;
@@ -428,9 +439,10 @@ exports.getHistory = async (req, res) => {
       if (endDate) filter.createdAt.$lte = new Date(endDate);
     }
 
+    // ✅ تعديل: تحويل الـ page والـ limit لأرقام صريحة منعاً لمشاكل الـ Skip في المونجو
     const history = await SensorData.find(filter)
       .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
+      .skip((Number(page) - 1) * Number(limit))
       .limit(Number(limit))
       .populate("sectorId", "name cropType")
       .lean();
@@ -448,8 +460,8 @@ exports.getHistory = async (req, res) => {
 };
 
 /* ============================================================
-5️⃣ GET ANALYTICS (تحليلات الأداء اليومي)
-============================================================ */
+    5️⃣ GET ANALYTICS (تحليلات الأداء اليومي)
+   ============================================================ */
 exports.getAnalytics = async (req, res) => {
   try {
     const { sectorId } = req.query;
