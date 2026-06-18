@@ -123,7 +123,7 @@ exports.uploadImage = async (req, res) => {
       formData.append("cropType", cropType);
 
       const aiResponse = await axios.post(
-        "https://Amrkhaled2004.pythonanywhere.com/api/predict_with_image",
+        "https://amr2004-ecosense-ai.hf.space/api/predict_image",
         formData,
         {
           headers: {
