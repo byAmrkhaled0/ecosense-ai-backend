@@ -36,7 +36,7 @@ const sendFirebasePush = async (user, title, message) => {
 };
 
 /* ============================================================
-    1️⃣ UPLOAD & AI ANALYZE (نسخة الرفع والتعرف بالسيريال أو القطاع)
+    1️⃣ UPLOAD & AI ANALYZE
 ============================================================ */
 exports.uploadImage = async (req, res) => {
   try {
@@ -55,7 +55,7 @@ exports.uploadImage = async (req, res) => {
 
     const imageUrl = req.file.path;
 
-    // 🎯 حالة 1: الـ deviceSerial مبعوتة صراحة (من الـ ESP32-CAM أو ممررة من الفرونت إند)
+    // 🎯 حالة 1: الـ deviceSerial مبعوتة صراحة (من الـ ESP32-CAM)
     if (deviceSerial && deviceSerial !== "ESP32-GENERIC-UNIT") {
       device = await Device.findOne({ deviceSerial }).populate("sectorId");
 
@@ -73,7 +73,7 @@ exports.uploadImage = async (req, res) => {
       uploadedBy = null;
       captureReason = "Automatic Camera";
     }
-    // 🌿 حالة 2: التعرف الذكي عن طريق الـ sectorId (الرفع اليدوي من العامل أو المالك)
+    // 🌿 حالة 2: التعرف الذكي عن طريق الـ sectorId (الرفع اليدوي)
     else if (sectorId) {
       const sector = await Sector.findById(sectorId);
       if (!sector) {
@@ -83,17 +83,16 @@ exports.uploadImage = async (req, res) => {
         });
       }
 
-      // البحث عن أي جهاز IoT مسجل ومربوط بهذا القطاع تلقائياً بالخلفية
       device = await Device.findOne({ sectorId: sector._id });
 
       finalSectorId = sector._id;
       finalOwnerId = sector.ownerId;
       finalWorkerId = sector.assignedWorker;
       cropType = sector.cropType || "Unknown";
-      uploadedBy = sector.ownerId; // تعيين المالك كمسؤول افتراضي عن الرفع اليدوي للتقرير
+      uploadedBy = req.user ? req.user._id : sector.ownerId;
       captureReason = "Manual Scan";
     }
-    // ⚠️ حالة 3: لو الطلب ناقص تماماً ولم يرسل أي معرفات
+    // ⚠️ حالة 3: لو الطلب ناقص
     else {
       return res.status(400).json({
         success: false,
@@ -107,7 +106,11 @@ exports.uploadImage = async (req, res) => {
       status: "Unknown",
       diseaseName: "تحليل غير متاح",
       confidence: 0,
-      recommendation: "سيرفر الـ AI لا يستجيب",
+      recommendations: ["سيرفر الـ AI لا يستجيب"],
+      treatmentPlan: [],
+      captureTips: [],
+      ratios: { green: 0, yellow: 0, brown: 0, damaged: 0 },
+      note: "",
     };
 
     try {
@@ -117,139 +120,160 @@ exports.uploadImage = async (req, res) => {
       });
 
       formData.append("file", imageResponse.data, {
-        filename: req.file.originalname,
-        contentType: req.file.mimetype,
+        filename: req.file.originalname || "image.jpg",
+        contentType: req.file.mimetype || "image/jpeg",
       });
       formData.append("cropType", cropType);
+
       const aiResponse = await axios.post(
-      "https://amr2004-ecosense-ai.hf.space/api/predict_image",
-      formData,
-      {
-        headers: {
-          ...formData.getHeaders(),
-          "ngrok-skip-browser-warning": "true",
+        "https://amr2004-ecosense-ai.hf.space/api/predict_image",
+        formData,
+        {
+          headers: {
+            // 🛡️ الطريقة الآمنة لطلب الـ Headers في البيئات المرفوعة سحابياً لعدم تجميد الدالة
+            ...formData.getHeaders(),
+            "ngrok-skip-browser-warning": "true",
+          },
+          timeout: 25000, // زيادة المهلة لضمان استقرار الاستجابة الكبيرة
         },
-        timeout: 20000,
+      );
+
+      if (aiResponse.data) {
+        const fullAnalysis =
+          aiResponse.data.analysis || aiResponse.data.image_analysis || {};
+
+        let conf = parseFloat(
+          aiResponse.data.confidence ||
+            aiResponse.data.final_confidence ||
+            fullAnalysis.confidence,
+        );
+        conf = isNaN(conf) ? 0 : conf;
+
+        aiAnalysis = {
+          status:
+            aiResponse.data.status ||
+            fullAnalysis.status ||
+            aiResponse.data.final_status ||
+            fullAnalysis.final_status ||
+            "Infected",
+          diseaseName:
+            aiResponse.data.disease_name_ar ||
+            fullAnalysis.disease_name_ar ||
+            aiResponse.data.disease_name ||
+            fullAnalysis.disease_name ||
+            "Severe Plant Stress",
+          confidence: conf,
+          recommendations:
+            aiResponse.data.recommendations ||
+            fullAnalysis.recommendations ||
+            aiResponse.data.image_recommendations ||
+            fullAnalysis.image_recommendations ||
+            [],
+          treatmentPlan: fullAnalysis.treatment_plan || [],
+          captureTips: fullAnalysis.capture_tips || [],
+          ratios: {
+            green: parseFloat(fullAnalysis.green_ratio ?? 0) * 100,
+            yellow: parseFloat(fullAnalysis.yellow_ratio ?? 0) * 100,
+            brown: parseFloat(fullAnalysis.brown_ratio ?? 0) * 100,
+            damaged: parseFloat(fullAnalysis.damaged_ratio ?? 0) * 100,
+          },
+          note: fullAnalysis.note || "",
+        };
       }
-    );
-
-    if (aiResponse.data) {
-      const fullAnalysis = aiResponse.data.analysis || aiResponse.data.image_analysis || {};
-      
-      let conf = parseFloat(aiResponse.data.confidence || aiResponse.data.final_confidence || fullAnalysis.confidence);
-      conf = isNaN(conf) ? 0 : conf;
-
+    } catch (aiErr) {
+      console.log("⚠️ Image AI Server Error:", aiErr.message);
       aiAnalysis = {
-        // تأمين قراءة الـ status من كل الأماكن المحتملة لمنع الـ Override بـ "Detected" تلقائياً
-        status: aiResponse.data.status || fullAnalysis.status || aiResponse.data.final_status || fullAnalysis.final_status || "Infected",
-        
-        // جلب الاسم العربي إن وجد، أو الإنجليزي من الـ AI
-        diseaseName: aiResponse.data.disease_name_ar || fullAnalysis.disease_name_ar || aiResponse.data.disease_name || fullAnalysis.disease_name || "Severe Plant Stress",
-        
-        confidence: conf,
-        
-        // التأكد من جلب المصفوفات بشكل سليم بنسبة 100%
-        recommendations: aiResponse.data.recommendations || fullAnalysis.recommendations || aiResponse.data.image_recommendations || fullAnalysis.image_recommendations || [],
-        
-        treatmentPlan: fullAnalysis.treatment_plan || [],
-        
-        captureTips: fullAnalysis.capture_tips || [],
-        
-        // حساب النسب المئوية بدقة لأشرطة التحميل في الفرونت إند
-        ratios: {
-          green: parseFloat(fullAnalysis.green_ratio ?? 0) * 100,
-          yellow: parseFloat(fullAnalysis.yellow_ratio ?? 0) * 100,
-          brown: parseFloat(fullAnalysis.brown_ratio ?? 0) * 100,
-          damaged: parseFloat(fullAnalysis.damaged_ratio ?? 0) * 100,
-        },
-        note: fullAnalysis.note || "",
+        status: "Unknown",
+        diseaseName: "تعذر فحص الصورة حالياً",
+        confidence: 0,
+        recommendations: ["سيرفر تحليل الصور لا يستجيب، يرجى المحاولة لاحقاً."],
+        treatmentPlan: [],
+        captureTips: [],
+        ratios: { green: 0, yellow: 0, brown: 0, damaged: 0 },
+        note: "خطأ في الاتصال بسيرفر الذكاء الاصطناعي.",
       };
     }
-  } catch (aiErr) {
-    console.log("⚠️ Image AI Server Error:", aiErr.message);
-    // 🛡️ تأمين السيستم كخطة بديلة في حال سقوط السيرفر الخاص بالـ AI
-    aiAnalysis = {
-      status: "Unknown",
-      diseaseName: "تعذر فحص الصورة حالياً",
-      confidence: 0,
-      recommendations: ["سيرفر تحليل الصور لا يستجيب، يرجى المحاولة لاحقاً."],
-      treatmentPlan: [],
-      captureTips: [],
-      ratios: { green: 0, yellow: 0, brown: 0, damaged: 0 },
-      note: "خطأ في الاتصال بسيرفر الذكاء الاصطناعي.",
-    };
-  }
 
-  try {
-    // حفظ السجل في الداتابيز
-    const newImageLog = await ImageLog.create({
-      ownerId: finalOwnerId,
-      sectorId: finalSectorId,
-      imageUrl: imageUrl,
-      capturedBy: uploadedBy || finalOwnerId,
-      analysisResult: aiAnalysis, // 👈 سيتخزن كاملاً بشرط تحديث الـ Schema أدناه
-      deviceId: device ? device._id : null,
-      captureReason: captureReason,
-    });
-
-    // 4️⃣ الإشعارات الفورية والـ Socket.io
-    if (aiAnalysis.status !== "Healthy" && aiAnalysis.status !== "Unknown") {
-      const io = req.app.get("io");
-      const title = "🚨 تنبيه صحة النبات";
-      const message =
-        captureReason === "Manual Scan"
-          ? `نتائج الفحص اليدوي: رصد (${aiAnalysis.diseaseName})`
-          : `الكاميرا الآلية رصدت إصابة (${aiAnalysis.diseaseName})`;
-
-      const owner = await User.findById(finalOwnerId);
-      const worker = finalWorkerId ? await User.findById(finalWorkerId) : null;
-
-      if (typeof sendFirebasePush === "function") {
-        if (owner) await sendFirebasePush(owner, title, message);
-        if (worker) await sendFirebasePush(worker, title, message);
-      }
-
-      const notificationData = {
-        title,
-        message,
-        type: "disease",
+    try {
+      // حفظ السجل في الداتابيز بالإصدار المحدث والشامل
+      const newImageLog = await ImageLog.create({
+        ownerId: finalOwnerId,
         sectorId: finalSectorId,
-      };
+        imageUrl: imageUrl,
+        capturedBy: uploadedBy,
+        analysisResult: aiAnalysis,
+        deviceId: device ? device._id : null,
+        captureReason: captureReason,
+      });
 
-      if (finalOwnerId) {
-        const nOwner = await Notification.create({
-          ...notificationData,
-          recipient: finalOwnerId,
-        });
-        if (io) io.to(finalOwnerId.toString()).emit("newNotification", nOwner);
+      // 4️⃣ الإشعارات الفورية والـ Socket.io
+      if (aiAnalysis.status !== "Healthy" && aiAnalysis.status !== "Unknown") {
+        const io = req.app.get("io");
+        const title = "🚨 تنبيه صحة النبات";
+        const message =
+          captureReason === "Manual Scan"
+            ? `نتائج الفحص اليدوي: رصد (${aiAnalysis.diseaseName})`
+            : `الكاميرا الآلية رصدت إصابة (${aiAnalysis.diseaseName})`;
+
+        const owner = await User.findById(finalOwnerId);
+        const worker = finalWorkerId
+          ? await User.findById(finalWorkerId)
+          : null;
+
+        if (typeof sendFirebasePush === "function") {
+          if (owner) await sendFirebasePush(owner, title, message);
+          if (worker) await sendFirebasePush(worker, title, message);
+        }
+
+        const notificationData = {
+          title,
+          message,
+          type: "disease",
+          sectorId: finalSectorId,
+        };
+
+        if (finalOwnerId) {
+          const nOwner = await Notification.create({
+            ...notificationData,
+            recipient: finalOwnerId,
+          });
+          if (io)
+            io.to(finalOwnerId.toString()).emit("newNotification", nOwner);
+        }
+
+        if (finalWorkerId) {
+          const nWorker = await Notification.create({
+            ...notificationData,
+            recipient: finalWorkerId,
+          });
+          if (io)
+            io.to(finalWorkerId.toString()).emit("newNotification", nWorker);
+        }
       }
 
-      if (finalWorkerId) {
-        const nWorker = await Notification.create({
-          ...notificationData,
-          recipient: finalWorkerId,
-        });
-        if (io) io.to(finalWorkerId.toString()).emit("newNotification", nWorker);
-      }
+      return res.status(201).json({ success: true, data: newImageLog });
+    } catch (err) {
+      console.error(
+        "❌ Error in ImageLog.create inside Controller:",
+        err.message,
+      );
+      return res.status(500).json({ success: false, error: err.message });
     }
-
-    return res.status(201).json({ success: true, data: newImageLog });
-  } catch (err) {
-    console.error("❌ Error in uploadImage Controller:", err.message);
-    return res.status(500).json({ success: false, error: err.message });
+  } catch (globalErr) {
+    console.error("❌ Global Error in Controller:", globalErr.message);
+    return res.status(500).json({ success: false, error: globalErr.message });
   }
+};
 
 /*======================================
-    2️⃣ GET IMAGE HISTORY (عرض التاريخ)
+    2️⃣ GET IMAGE HISTORY 
 ============================================================ */
 exports.getImageHistory = async (req, res) => {
   try {
     const { sectorId, page = 1, limit = 10 } = req.query;
     let filter = {};
 
-    // 1. لو المستخدم عامل (Worker)
     if (req.user.role === "worker") {
-      // هنجيب كل القطاعات المسؤول عنها العامل ده
       const workerSectors = await Sector.find({
         assignedWorker: req.user._id,
       }).select("_id");
@@ -257,7 +281,6 @@ exports.getImageHistory = async (req, res) => {
       const sectorIds = workerSectors.map((s) => s._id);
 
       if (sectorId) {
-        // التأكد إن العامل له صلاحية على القطاع اللي طالبه
         if (!sectorIds.map((id) => id.toString()).includes(sectorId)) {
           return res
             .status(403)
@@ -265,20 +288,15 @@ exports.getImageHistory = async (req, res) => {
         }
         filter.sectorId = sectorId;
       } else {
-        // لو مطلقش قطاع معين، هات صور كل قطاعاته
         filter.sectorId = { $in: sectorIds };
       }
-    }
-    // 2. لو المستخدم صاحب المزرعة (Owner) أو Admin
-    else {
-      // عشان تجيب "كل اللي رفع في القطاع"، هنجيب الأول كل القطاعات بتاعة الـ Owner ده
+    } else {
       const ownerSectors = await Sector.find({ ownerId: req.user._id }).select(
         "_id",
       );
       const ownerSectorIds = ownerSectors.map((s) => s._id);
 
       if (sectorId) {
-        // لو طالب قطاع معين، اتأكد إنه بتاعه
         if (!ownerSectorIds.map((id) => id.toString()).includes(sectorId)) {
           return res
             .status(403)
@@ -286,18 +304,16 @@ exports.getImageHistory = async (req, res) => {
         }
         filter.sectorId = sectorId;
       } else {
-        // لو مبعتش قطاع معين، يعرض كل صور القطاعات المملوكة للـ Owner ده (اللي رفعها هو أو عماله)
         filter.sectorId = { $in: ownerSectorIds };
       }
     }
 
-    // التنفيذ وجلب البيانات مع الـ Pagination
     const images = await ImageLog.find(filter)
       .sort({ createdAt: -1 })
       .skip((page - 1) * Number(limit))
       .limit(Number(limit))
       .populate("sectorId", "name cropType")
-      .populate("capturedBy", "firstName lastName role") // ضفنا الـ role عشان تعرف مين اللي رفعها في الفرونت إند
+      .populate("capturedBy", "firstName lastName role")
       .lean();
 
     const total = await ImageLog.countDocuments(filter);
@@ -313,8 +329,9 @@ exports.getImageHistory = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
+
 /* ============================================================
-    3️⃣ DELETE IMAGE LOG (حذف الصورة من Cloudinary والداتابيز)
+    3️⃣ DELETE IMAGE LOG
 ============================================================ */
 exports.deleteImageLog = async (req, res) => {
   try {
@@ -333,18 +350,12 @@ exports.deleteImageLog = async (req, res) => {
         .json({ success: false, message: "ليس لديك صلاحية لحذف هذه الصورة." });
     }
 
-    // ✅ التعديل: حذف الصورة من Cloudinary باستخدام الـ Public ID
-    // استخراج الـ ID من الرابط: ecosense/images/filename
     const urlParts = log.imageUrl.split("/");
     const fileNameWithExt = urlParts[urlParts.length - 1];
     const publicIdWithoutExt = fileNameWithExt.split(".")[0];
-
-    // تأكد من مسار الفولدر كما عرفته في ملف الـ upload.js
     const fullPublicId = `ecosense/images/${publicIdWithoutExt}`;
 
     await cloudinary.uploader.destroy(fullPublicId);
-
-    // حذف السجل من الداتابيز
     await log.deleteOne();
 
     res.status(200).json({
