@@ -124,14 +124,13 @@ exports.analyzeLastReading = async (req, res) => {
     const finalOwnerId = lastReading.ownerId;
     const assignedWorkerId = sector.assignedWorker;
 
-    // 2. تجهيز بيانات الـ AI الافتراضية
+    // 2. تجهيز بيانات الـ AI الافتراضية بالهيكل المحدث
     let aiAnalysis = {
       status: "Safe",
       recommendation: "سيرفر الـ AI لم يستجب",
     };
 
     try {
-      // تطبيق دالات التنظيف والـ Formatting للـ JSON بـقيمة متوافقة مع الموديل
       const formattedCrop = formatCropType(sector.cropType);
       const formattedLight = formatLightValue(lastReading.light);
 
@@ -146,7 +145,10 @@ exports.analyzeLastReading = async (req, res) => {
           temperature: Number(lastReading.air.temperature),
           humidity: Number(lastReading.air.humidity),
           soilMoisture: Number(lastReading.soil.moisture),
-          soilTemp: Number(lastReading.air.temperature) - 2,
+          soilTemp:
+            lastReading.soil.temperature !== null
+              ? Number(lastReading.soil.temperature)
+              : Number(lastReading.air.temperature) - 2,
           light: formattedLight,
         },
         {
@@ -162,18 +164,39 @@ exports.analyzeLastReading = async (req, res) => {
         const data = aiResponse.data;
         console.log("✅ AI Response Data:", data);
 
-        let recs = "لا توجد توصيات حالياً";
+        // الحفاظ على دمج الـ string من أجل التوافق مع الشاشات القديمة
+        let legacyRecs = "لا توجد توصيات حالياً";
         if (data.recommendations) {
-          recs = Array.isArray(data.recommendations)
+          legacyRecs = Array.isArray(data.recommendations)
             ? data.recommendations.join(" | ")
             : data.recommendations;
-        } else if (data.summary) {
-          recs = data.summary;
+        } else if (data.general_recommendation || data.summary) {
+          legacyRecs = data.general_recommendation || data.summary;
         }
 
+        // بناء الـ Object الكامل المتوافق مع الـ Schema المحدثة
         aiAnalysis = {
           status: data.final_status || data.status || "Safe",
-          recommendation: recs,
+          recommendation: legacyRecs,
+          final_status: data.final_status,
+          final_confidence: data.final_confidence,
+          general_recommendation: data.general_recommendation || data.summary,
+          recommendations: data.recommendations || [],
+          actions: data.actions || [],
+          risk_factors: data.risk_factors || [],
+          safety_layer: {
+            applied: data.safety_layer?.applied ?? false,
+            sensor_model_status: data.safety_layer?.sensor_model_status,
+            status_after_safety: data.safety_layer?.status_after_safety,
+            flags: data.safety_layer?.flags || [],
+          },
+          notification: {
+            send: data.notification?.send ?? false,
+            title: data.notification?.title || "",
+            message: data.notification?.message || "",
+            type: data.notification?.type || "info",
+          },
+          timestamp: data.timestamp || new Date().toISOString(),
         };
       }
     } catch (aiErr) {
@@ -205,24 +228,29 @@ exports.analyzeLastReading = async (req, res) => {
           "Warning",
         ];
 
-        // التحقق المرن: لو النص يحتوي على كلمة حرج أو خطر بالعربي أو مطابق للإنجليزي
+        // الاعتماد على الـ flags الحقيقية القادمة من طبقة حماية الـ AI لو توفرت، بالإضافة للشروط السابقة
         const isCritical =
           lastReading.air.temperature > 45 ||
           lastReading.soil.moisture < 10 ||
           criticalStatuses.includes(currentStatus) ||
           currentStatus.includes("حرجة") ||
-          currentStatus.includes("خطر");
+          currentStatus.includes("خطر") ||
+          aiAnalysis.notification.send === true; // تفعيل فوري لو الـ AI قرر إرسال الإشعار بنفسه
+
+        // تحديد نص الرسالة بناءً على البيانات الغنية الجديدة لو كانت موجودة
+        const alertMessage =
+          aiAnalysis.notification.message ||
+          `القطاع: ${sector.name} | الحالة: ${currentStatus} | حرارة: ${lastReading.air.temperature}°C`;
 
         const io = req.app.get("io");
         const socketPayload = {
-          title: "🚨 تنبيه صحة النبات",
-          message: `القطاع: ${sector.name} | الحالة: ${currentStatus} | حرارة: ${lastReading.air.temperature}°C`,
+          title: aiAnalysis.notification.title || "🚨 تنبيه صحة النبات",
+          message: alertMessage,
           sectorId: sector._id,
           createdAt: new Date(),
         };
 
         if (io) {
-          // ✅ تعديل: البث المباشر الموجه للغرف (Rooms) الخاصة بأصحاب الشأن فقط منعاً للتداخل بين المزارع
           if (finalOwnerId)
             io.to(finalOwnerId.toString()).emit(
               "newNotification",
@@ -238,7 +266,6 @@ exports.analyzeLastReading = async (req, res) => {
           );
         }
 
-        // الحفاظ على المنطق القديم لحفظ الداتابيز وإرسال الهاتف لو حرج فعلياً
         if (isCritical) {
           const usersToNotify = await User.find({
             _id: { $in: [finalOwnerId, assignedWorkerId].filter(Boolean) },
@@ -252,8 +279,9 @@ exports.analyzeLastReading = async (req, res) => {
                   {
                     to: user.fcmToken,
                     notification: {
-                      title: "🚨 تنبيه خطر فوري", // عنوان حرج للإشعار الخارجي
-                      body: socketPayload.message,
+                      title:
+                        aiAnalysis.notification.title || "🚨 تنبيه خطر فوري",
+                      body: alertMessage,
                       sound: "default",
                     },
                     priority: "high",
@@ -276,9 +304,9 @@ exports.analyzeLastReading = async (req, res) => {
             {
               recipient: finalOwnerId,
               sectorId: sector._id,
-              title: "🚨 تنبيه خطر فوري",
-              message: socketPayload.message,
-              type: "warning",
+              title: aiAnalysis.notification.title || "🚨 تنبيه خطر فوري",
+              message: alertMessage,
+              type: aiAnalysis.notification.type || "warning",
             },
           ];
 
@@ -286,9 +314,9 @@ exports.analyzeLastReading = async (req, res) => {
             notificationsToSave.push({
               recipient: assignedWorkerId,
               sectorId: sector._id,
-              title: "🚨 تنبيه خطر فوري",
-              message: socketPayload.message,
-              type: "warning",
+              title: aiAnalysis.notification.title || "🚨 تنبيه خطر فوري",
+              message: alertMessage,
+              type: aiAnalysis.notification.type || "warning",
             });
           }
 
