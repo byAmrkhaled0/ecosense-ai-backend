@@ -122,78 +122,77 @@ exports.uploadImage = async (req, res) => {
       });
       formData.append("cropType", cropType);
       const aiResponse = await axios.post(
-        "https://amr2004-ecosense-ai.hf.space/api/predict_image",
-        formData,
-        {
-          headers: {
-            ...formData.getHeaders(),
-            "ngrok-skip-browser-warning": "true",
-          },
-          timeout: 20000,
+      "https://amr2004-ecosense-ai.hf.space/api/predict_image",
+      formData,
+      {
+        headers: {
+          ...formData.getHeaders(),
+          "ngrok-skip-browser-warning": "true",
         },
-      );
-
-      if (aiResponse.data) {
-        // الـ الحل الذكي: هنخزن الـ الـ Response الأصلي والكامل أو نفلتره كـ Object نضيف
-        const fullAnalysis =
-          aiResponse.data.analysis || aiResponse.data.image_analysis || {};
-        let conf = parseFloat(
-          aiResponse.data.confidence || aiResponse.data.final_confidence,
-        );
-        conf = isNaN(conf) ? 0 : conf;
-
-        aiAnalysis = {
-          status: aiResponse.data.status || fullAnalysis.status || "Infected",
-          diseaseName:
-            aiResponse.data.disease_name ||
-            fullAnalysis.disease_name_ar ||
-            "Severe Plant Stress",
-          confidence: conf,
-          // 🔥 بنسيب الـ Arrays زي ما هي ومبنحولهاش لـ String عشان الفرونت إند يستفاد منها
-          recommendations:
-            aiResponse.data.recommendations ||
-            fullAnalysis.recommendations ||
-            [],
-          treatmentPlan: fullAnalysis.treatment_plan || [],
-          captureTips: fullAnalysis.capture_tips || [],
-          // حفظ النسب كأرقام حقيقية عشان الـ Progress Bars في الويب
-          ratios: {
-            green: parseFloat(fullAnalysis.green_ratio || 0) * 100,
-            yellow: parseFloat(fullAnalysis.yellow_ratio || 0) * 100,
-            brown: parseFloat(fullAnalysis.brown_ratio || 0) * 100,
-            damaged: parseFloat(fullAnalysis.damaged_ratio || 0) * 100,
-          },
-          note: fullAnalysis.note || "",
-        };
+        timeout: 20000,
       }
-    } catch (aiErr) {
-      console.log("⚠️ Image AI Server Error:", aiErr.message);
-      // 🛡️ تأمين السيستم في حال وقوع سيرفر الـ AI
+    );
+
+    if (aiResponse.data) {
+      const fullAnalysis = aiResponse.data.analysis || aiResponse.data.image_analysis || {};
+      
+      let conf = parseFloat(aiResponse.data.confidence || aiResponse.data.final_confidence || fullAnalysis.confidence);
+      conf = isNaN(conf) ? 0 : conf;
+
       aiAnalysis = {
-        status: "Unknown",
-        diseaseName: "تعذر فحص الصورة حالياً",
-        confidence: 0,
-        recommendations: ["سيرفر تحليل الصور لا يستجيب، يرجى المحاولة لاحقاً."],
-        treatmentPlan: [],
-        captureTips: [],
-        ratios: { green: 0, yellow: 0, brown: 0, damaged: 0 },
-        note: "خطأ في الاتصال بسيرفر الذكاء الاصطناعي.",
+        // تأمين قراءة الـ status من كل الأماكن المحتملة لمنع الـ Override بـ "Detected" تلقائياً
+        status: aiResponse.data.status || fullAnalysis.status || aiResponse.data.final_status || fullAnalysis.final_status || "Infected",
+        
+        // جلب الاسم العربي إن وجد، أو الإنجليزي من الـ AI
+        diseaseName: aiResponse.data.disease_name_ar || fullAnalysis.disease_name_ar || aiResponse.data.disease_name || fullAnalysis.disease_name || "Severe Plant Stress",
+        
+        confidence: conf,
+        
+        // التأكد من جلب المصفوفات بشكل سليم بنسبة 100%
+        recommendations: aiResponse.data.recommendations || fullAnalysis.recommendations || aiResponse.data.image_recommendations || fullAnalysis.image_recommendations || [],
+        
+        treatmentPlan: fullAnalysis.treatment_plan || [],
+        
+        captureTips: fullAnalysis.capture_tips || [],
+        
+        // حساب النسب المئوية بدقة لأشرطة التحميل في الفرونت إند
+        ratios: {
+          green: parseFloat(fullAnalysis.green_ratio ?? 0) * 100,
+          yellow: parseFloat(fullAnalysis.yellow_ratio ?? 0) * 100,
+          brown: parseFloat(fullAnalysis.brown_ratio ?? 0) * 100,
+          damaged: parseFloat(fullAnalysis.damaged_ratio ?? 0) * 100,
+        },
+        note: fullAnalysis.note || "",
       };
     }
+  } catch (aiErr) {
+    console.log("⚠️ Image AI Server Error:", aiErr.message);
+    // 🛡️ تأمين السيستم كخطة بديلة في حال سقوط السيرفر الخاص بالـ AI
+    aiAnalysis = {
+      status: "Unknown",
+      diseaseName: "تعذر فحص الصورة حالياً",
+      confidence: 0,
+      recommendations: ["سيرفر تحليل الصور لا يستجيب، يرجى المحاولة لاحقاً."],
+      treatmentPlan: [],
+      captureTips: [],
+      ratios: { green: 0, yellow: 0, brown: 0, damaged: 0 },
+      note: "خطأ في الاتصال بسيرفر الذكاء الاصطناعي.",
+    };
+  }
 
-    // حفظ السجل في الداتابيز (تأكد أن الموديل ImageLog بيقبل الـ Object ده في الـ analysisResult)
+  try {
+    // حفظ السجل في الداتابيز
     const newImageLog = await ImageLog.create({
       ownerId: finalOwnerId,
       sectorId: finalSectorId,
       imageUrl: imageUrl,
       capturedBy: uploadedBy || finalOwnerId,
-      analysisResult: aiAnalysis, // 👈 متخزن ومتقفل بجميع البيانات والمصفوفات
+      analysisResult: aiAnalysis, // 👈 سيتخزن كاملاً بشرط تحديث الـ Schema أدناه
       deviceId: device ? device._id : null,
       captureReason: captureReason,
     });
 
     // 4️⃣ الإشعارات الفورية والـ Socket.io
-    // تجنبنا المشاكل لو الـ status بـ Unknown أو Healthy
     if (aiAnalysis.status !== "Healthy" && aiAnalysis.status !== "Unknown") {
       const io = req.app.get("io");
       const title = "🚨 تنبيه صحة النبات";
@@ -230,8 +229,7 @@ exports.uploadImage = async (req, res) => {
           ...notificationData,
           recipient: finalWorkerId,
         });
-        if (io)
-          io.to(finalWorkerId.toString()).emit("newNotification", nWorker);
+        if (io) io.to(finalWorkerId.toString()).emit("newNotification", nWorker);
       }
     }
 
@@ -240,7 +238,7 @@ exports.uploadImage = async (req, res) => {
     console.error("❌ Error in uploadImage Controller:", err.message);
     return res.status(500).json({ success: false, error: err.message });
   }
-};
+
 /*======================================
     2️⃣ GET IMAGE HISTORY (عرض التاريخ)
 ============================================================ */

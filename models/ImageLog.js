@@ -5,7 +5,7 @@ const ImageLogSchema = new mongoose.Schema(
     capturedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: false, // تم تعديلها لتسمح بـ null في حالة الكاميرات التلقائية (Automatic Camera)
       index: true,
     },
     ownerId: {
@@ -25,15 +25,25 @@ const ImageLogSchema = new mongoose.Schema(
       required: [true, "Image URL is required"],
     },
     analysisResult: {
-      status: String,
-      diseaseName: String,
-      confidence: Number,
-      recommendation: String,
-      // تأكد من تطابق هذه الأسماء مع ما يتم حفظه في الـ Controller
-      greenRatio: Number,
-      yellowRatio: Number,
-      brownRatio: Number,
-      healthScore: Number,
+      status: { type: String, default: "Unknown" },
+      diseaseName: { type: String, default: "Severe Plant Stress" },
+      confidence: { type: Number, default: 0 },
+      recommendations: [{ type: String }],
+      treatmentPlan: [
+        {
+          priority: Number,
+          title: String,
+          details: String,
+        },
+      ],
+      captureTips: [{ type: String }],
+      ratios: {
+        green: { type: Number, default: 0 },
+        yellow: { type: Number, default: 0 },
+        brown: { type: Number, default: 0 },
+        damaged: { type: Number, default: 0 },
+      },
+      note: { type: String, default: "" },
     },
     captureReason: {
       type: String,
