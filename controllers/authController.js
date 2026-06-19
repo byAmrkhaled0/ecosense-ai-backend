@@ -330,7 +330,9 @@ exports.socialAuthSuccess = async (req, res) => {
 
     // حدد رابط الفرونت إند بتاعك (محلي أو المرفوع على المخدم)
     const frontendUrl =
-      process.env.FRONTEND_URL || "https://ecosensedabab.netlify.app";
+      process.env.FRONTEND_URL ||
+      "https://ecosensedabab.netlify.app" ||
+      "https://smart-plant-health-frontend.vercel.app";
 
     if (!user) {
       // لو مفيش مستخدم رجعه لصفحة اللوجن مع رسالة خطأ في الرابط
@@ -347,7 +349,9 @@ exports.socialAuthSuccess = async (req, res) => {
   } catch (err) {
     console.error("Social Auth Success Error:", err.message);
     const frontendUrl =
-      process.env.FRONTEND_URL || "https://ecosensedabab.netlify.app";
+      process.env.FRONTEND_URL ||
+      "https://ecosensedabab.netlify.app" ||
+      "https://smart-plant-health-frontend.vercel.app";
     return res.redirect(`${frontendUrl}/login?error=server_error`);
   }
 };

@@ -33,7 +33,8 @@ app.use(
     origin: [
       "http://localhost:3000",
       "http://localhost:5173",
-      "https://ecosensedabab.netlify.app", // 👈 تذكر تغيير هذا الدومين لرابط الـ الفرونت النهائي
+      "https://ecosensedabab.netlify.app",
+      "https://smart-plant-health-frontend.vercel.app", // 👈 تذكر تغيير هذا الدومين لرابط الـ الفرونت النهائي
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
@@ -89,6 +90,7 @@ const io = new Server(server, {
       "http://localhost:3000",
       "http://localhost:5173",
       "https://ecosensedabab.netlify.app",
+      "https://smart-plant-health-frontend.vercel.app",
     ],
     credentials: true,
   },
