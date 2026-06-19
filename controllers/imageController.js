@@ -121,7 +121,6 @@ exports.uploadImage = async (req, res) => {
         contentType: req.file.mimetype,
       });
       formData.append("cropType", cropType);
-
       const aiResponse = await axios.post(
         "https://amr2004-ecosense-ai.hf.space/api/predict_image",
         formData,
@@ -135,44 +134,67 @@ exports.uploadImage = async (req, res) => {
       );
 
       if (aiResponse.data) {
-        const analysisData =
-          aiResponse.data.analysis || aiResponse.data.image_analysis;
-        let conf = parseFloat(aiResponse.data.confidence);
+        // الـ الحل الذكي: هنخزن الـ الـ Response الأصلي والكامل أو نفلتره كـ Object نضيف
+        const fullAnalysis =
+          aiResponse.data.analysis || aiResponse.data.image_analysis || {};
+        let conf = parseFloat(
+          aiResponse.data.confidence || aiResponse.data.final_confidence,
+        );
         conf = isNaN(conf) ? 0 : conf;
 
         aiAnalysis = {
-          status: aiResponse.data.status || "Infected",
-          diseaseName: aiResponse.data.disease_name || "Severe Plant Stress",
+          status: aiResponse.data.status || fullAnalysis.status || "Infected",
+          diseaseName:
+            aiResponse.data.disease_name ||
+            fullAnalysis.disease_name_ar ||
+            "Severe Plant Stress",
           confidence: conf,
-          recommendation: aiResponse.data.recommendations
-            ? aiResponse.data.recommendations.join(" | ")
-            : "يرجى مراجعة المختص",
+          // 🔥 بنسيب الـ Arrays زي ما هي ومبنحولهاش لـ String عشان الفرونت إند يستفاد منها
+          recommendations:
+            aiResponse.data.recommendations ||
+            fullAnalysis.recommendations ||
+            [],
+          treatmentPlan: fullAnalysis.treatment_plan || [],
+          captureTips: fullAnalysis.capture_tips || [],
+          // حفظ النسب كأرقام حقيقية عشان الـ Progress Bars في الويب
+          ratios: {
+            green: parseFloat(fullAnalysis.green_ratio || 0) * 100,
+            yellow: parseFloat(fullAnalysis.yellow_ratio || 0) * 100,
+            brown: parseFloat(fullAnalysis.brown_ratio || 0) * 100,
+            damaged: parseFloat(fullAnalysis.damaged_ratio || 0) * 100,
+          },
+          note: fullAnalysis.note || "",
         };
-
-        if (analysisData) {
-          const g = parseFloat(analysisData.green_ratio || 0) * 100;
-          const y = parseFloat(analysisData.yellow_ratio || 0) * 100;
-          const b = parseFloat(analysisData.brown_ratio || 0) * 100;
-          aiAnalysis.recommendation += ` [تحليل الألوان: أخضر ${g.toFixed(1)}% | أصفر ${y.toFixed(1)}% | بني ${b.toFixed(1)}%]`;
-        }
       }
     } catch (aiErr) {
       console.log("⚠️ Image AI Server Error:", aiErr.message);
+      // 🛡️ تأمين السيستم في حال وقوع سيرفر الـ AI
+      aiAnalysis = {
+        status: "Unknown",
+        diseaseName: "تعذر فحص الصورة حالياً",
+        confidence: 0,
+        recommendations: ["سيرفر تحليل الصور لا يستجيب، يرجى المحاولة لاحقاً."],
+        treatmentPlan: [],
+        captureTips: [],
+        ratios: { green: 0, yellow: 0, brown: 0, damaged: 0 },
+        note: "خطأ في الاتصال بسيرفر الذكاء الاصطناعي.",
+      };
     }
 
-    // حفظ السجل في الداتابيز
+    // حفظ السجل في الداتابيز (تأكد أن الموديل ImageLog بيقبل الـ Object ده في الـ analysisResult)
     const newImageLog = await ImageLog.create({
       ownerId: finalOwnerId,
       sectorId: finalSectorId,
       imageUrl: imageUrl,
       capturedBy: uploadedBy || finalOwnerId,
-      analysisResult: aiAnalysis,
-      deviceId: device ? device._id : null, // ربط السجل بالجهاز المكتشف تلقائياً إن وُجد
+      analysisResult: aiAnalysis, // 👈 متخزن ومتقفل بجميع البيانات والمصفوفات
+      deviceId: device ? device._id : null,
       captureReason: captureReason,
     });
 
     // 4️⃣ الإشعارات الفورية والـ Socket.io
-    if (aiAnalysis.status !== "Healthy") {
+    // تجنبنا المشاكل لو الـ status بـ Unknown أو Healthy
+    if (aiAnalysis.status !== "Healthy" && aiAnalysis.status !== "Unknown") {
       const io = req.app.get("io");
       const title = "🚨 تنبيه صحة النبات";
       const message =
