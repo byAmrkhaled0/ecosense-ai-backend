@@ -9,6 +9,8 @@ const {
   nativeGoogleAuth,
   socialAuthSuccess, // ✅ لازم تضيفها هنا عشان الـ Route يشوفها
   logout,
+  forgotPassword,
+  resetPassword,
 } = require("../controllers/authController");
 
 const { protect } = require("../middleware/authMiddleware");
@@ -34,6 +36,9 @@ router.get(
   }),
   socialAuthSuccess,
 );
+
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
 
 // للموبايل (Token-based)
 router.get("/me", protect, getMe);

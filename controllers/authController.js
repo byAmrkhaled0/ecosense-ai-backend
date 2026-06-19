@@ -355,3 +355,119 @@ exports.socialAuthSuccess = async (req, res) => {
     return res.redirect(`${frontendUrl}/login?error=server_error`);
   }
 };
+
+// 1️⃣ إرسال كود إعادة تعيين كلمة المرور (Forgot Password)
+exports.forgotPassword = async (req, res) => {
+  try {
+    let { email } = req.body;
+    if (!email) {
+      return res
+        .status(400)
+        .json({ success: false, message: "يرجى إدخال الإيميل" });
+    }
+
+    email = email.trim().toLowerCase();
+
+    // التأكد من وجود المستخدم في قاعدة البيانات (owner أو worker)
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "لا يوجد حساب مسجل بهذا الإيميل." });
+    }
+
+    // توليد رمز تفعيل عشوائي (6 أرقام)
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // تشفير الإيميل + الرمز داخل JWT مؤقت (صالح لمدة 10 دقائق)
+    const resetToken = jwt.sign({ email, resetCode }, process.env.JWT_SECRET, {
+      expiresIn: "10m",
+    });
+
+    const emailMessage = `
+        <h3>🔒 طلب إعادة تعيين كلمة المرور - EcoSense</h3>
+        <p>استخدم رمز التحقق التالي لإعادة تعيين كلمة المرور الخاصة بك. ينتهي الرمز خلال 10 دقائق:</p>
+        <h1 style="color: #2196F3; text-align: center; letter-spacing: 5px;">${resetCode}</h1>
+        <p>إذا لم تطلب هذا، يمكنك تجاهل هذا الإيميل بأمان.</p>
+    `;
+
+    try {
+      await sendEmail({
+        email,
+        subject: "رمز إعادة تعيين كلمة المرور - EcoSense",
+        message: emailMessage,
+      });
+
+      // نرسل الـ resetToken للفرونت إند عشان يمسكه ويمرره في الخطوة الجاية
+      return res.status(200).json({
+        success: true,
+        message: "تم إرسال رمز التحقق إلى الإيميل.",
+        resetToken: resetToken, // الـ Token المنقذ
+      });
+    } catch (err) {
+      return res
+        .status(500)
+        .json({ success: false, message: "فشل إرسال الإيميل." });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// 2️⃣ التحقق من الكود وتغيير الباسورد فعلياً (Reset Password)
+exports.resetPassword = async (req, res) => {
+  try {
+    const { code, newPassword, resetToken } = req.body;
+
+    if (!code || !newPassword || !resetToken) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "بيانات الطلب غير مكتملة (مطلوب الكود، الباسورد الجديد، والـ Token).",
+      });
+    }
+
+    // فك الـ Token والتحقق من صلاحيته
+    let decoded;
+    try {
+      decoded = jwt.verify(resetToken, process.env.JWT_SECRET);
+    } catch (err) {
+      if (err.name === "TokenExpiredError") {
+        return res.status(400).json({
+          success: false,
+          message:
+            "انتهت صلاحية جلسة إعادة التعيين (10 دقائق)، يرجى الطلب مجدداً.",
+        });
+      }
+      return res
+        .status(400)
+        .json({ success: false, message: "جلسة غير صالحة أو ملغية." });
+    }
+
+    // التحقق من مطابقة الكود المدخل مع الكود المشفر داخل الـ Token
+    if (decoded.resetCode !== code) {
+      return res
+        .status(400)
+        .json({ success: false, message: "الرمز غير صحيح، حاول مرة أخرى." });
+    }
+
+    // جلب المستخدم وتحديث الباسورد
+    const user = await User.findOne({ email: decoded.email });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "المستخدم لم يعد موجوداً." });
+    }
+
+    // تعيين الباسورد الجديد (الـ Schema هتعمل له الـ Hashing تلقائياً في الـ pre-save)
+    user.password = newPassword;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "تم تغيير كلمة المرور بنجاح 🎉 يمكنك تسجيل الدخول الآن.",
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
