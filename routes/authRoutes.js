@@ -20,14 +20,31 @@ router.post("/register", registerUser);
 router.post("/login", loginUser);
 router.post("/verify-otp", verifyAndRegister);
 router.post("/google-auth", nativeGoogleAuth);
+
 router.get(
   "/google",
+  (req, res, next) => {
+    // نقرأ الرابط اللي الفرونت إند باعته في الـ Query Parameter
+    const redirectTo = req.query.redirect_to;
+
+    if (redirectTo) {
+      // بنحفظ الرابط في الكوكيز لمدة 5 دقائق مثلاً لحين العودة من جوجل
+      res.cookie("returnTo", redirectTo, {
+        maxAge: 5 * 60 * 1000, // 5 دقائق
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "none",
+      });
+    }
+    next();
+  },
   passport.authenticate("google", {
     scope: ["profile", "email"],
     prompt: "select_account",
   }),
 );
-// 2. العودة من جوجل (الرابط اللي متسجل في Google Console)
+
+// 2. العودة من جوجل (الرابط المتسجل في Google Console)
 router.get(
   "/google/callback",
   passport.authenticate("google", {

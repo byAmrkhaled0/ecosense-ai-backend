@@ -326,33 +326,48 @@ exports.logout = async (req, res) => {
 // @desc    معالجة نجاح تسجيل الدخول عبر جوجل وإرسال التوكن
 exports.socialAuthSuccess = async (req, res) => {
   try {
+    // 1. قراءة الرابط الديناميكي من الكوكيز (مع حماية لو req.cookies مش معرفة)
+    const frontendUrl =
+      (req.cookies && req.cookies.returnTo) ||
+      process.env.FRONTEND_URL ||
+      "https://ecosensedabab.netlify.app";
+
     const user = req.user;
 
-    // حدد رابط الفرونت إند بتاعك (محلي أو المرفوع على المخدم)
-    const frontendUrl =
-      process.env.FRONTEND_URL ||
-      "https://ecosensedabab.netlify.app" ||
-      "https://smart-plant-health-frontend.vercel.app";
-
+    // لو المستخدم مش موجود، بنرجعه لصفحة اللوجن مع الخطأ ونمسح الكوكي
     if (!user) {
-      // لو مفيش مستخدم رجعه لصفحة اللوجن مع رسالة خطأ في الرابط
+      res.clearCookie("returnTo", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "none",
+      });
       return res.redirect(`${frontendUrl}/login?error=user_not_found`);
     }
 
-    // توليد التوكن
+    // 2. توليد التوكن بشكل آمن
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
       expiresIn: process.env.JWT_EXPIRE || "30d",
     });
 
-    // تحويل المستخدم للفرونت إند وتمرير التوكن في الرابط بشكل آمن
+    // 3. تنظيف الكوكي فوراً بعد نجاح العملية
+    res.clearCookie("returnTo", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "none",
+    });
+
+    // 4. تحويل المستخدم للفرونت إند الديناميكي وتمرير التوكن في الـ URL
     return res.redirect(`${frontendUrl}/login?token=${token}`);
   } catch (err) {
-    console.error("Social Auth Success Error:", err.message);
-    const frontendUrl =
+    console.error("❌ Social Auth Success Error:", err.message);
+
+    // تأمين جلب الرابط حتى في حالة الخطأ لضمان التوجيه الصحيح
+    const errorFrontendUrl =
+      (req.cookies && req.cookies.returnTo) ||
       process.env.FRONTEND_URL ||
-      "https://ecosensedabab.netlify.app" ||
-      "https://smart-plant-health-frontend.vercel.app";
-    return res.redirect(`${frontendUrl}/login?error=server_error`);
+      "https://ecosensedabab.netlify.app";
+
+    return res.redirect(`${errorFrontendUrl}/login?error=server_error`);
   }
 };
 
