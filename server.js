@@ -34,7 +34,7 @@ app.use(
       "http://localhost:3000",
       "http://localhost:5173",
       "http://localhost:62719",
-      "https://ecosensedabab.netlify.app",
+      "https://mttw-express-frontend.vercel.app",
       "https://smart-plant-health-frontend.vercel.app", // 👈 تذكر تغيير هذا الدومين لرابط الـ الفرونت النهائي
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -91,7 +91,7 @@ const io = new Server(server, {
       "http://localhost:3000",
       "http://localhost:5173",
       "http://localhost:62719",
-      "https://ecosensedabab.netlify.app",
+      "https://mttw-express-frontend.vercel.app",
       "https://smart-plant-health-frontend.vercel.app",
     ],
     credentials: true,

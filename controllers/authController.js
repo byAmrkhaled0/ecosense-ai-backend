@@ -330,7 +330,7 @@ exports.socialAuthSuccess = async (req, res) => {
     const frontendUrl =
       (req.cookies && req.cookies.returnTo) ||
       process.env.FRONTEND_URL ||
-      "https://ecosensedabab.netlify.app";
+      "https://mttw-express-frontend.vercel.app";
 
     const user = req.user;
 
@@ -365,7 +365,7 @@ exports.socialAuthSuccess = async (req, res) => {
     const errorFrontendUrl =
       (req.cookies && req.cookies.returnTo) ||
       process.env.FRONTEND_URL ||
-      "https://ecosensedabab.netlify.app";
+      "https://mttw-express-frontend.vercel.app";
 
     return res.redirect(`${errorFrontendUrl}/login?error=server_error`);
   }
