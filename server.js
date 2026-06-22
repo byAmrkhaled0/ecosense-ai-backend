@@ -186,15 +186,5 @@ app.use((err, req, res, next) => {
 // 🚀 Start Server
 // ============================
 const PORT = process.env.PORT || 6000;
-server.listen(PORT, () => {
-  console.log(`
-    *****************************************
-    🌐 EcoSense Secure Server is LIVE
-    🚀 Port: ${PORT}
-    🛡️ Mode: ${process.env.NODE_ENV || "development"}
-    📡 Socket.io: Enabled
-    *****************************************
-  `);
-});
 
 module.exports = app;
