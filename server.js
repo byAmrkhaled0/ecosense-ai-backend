@@ -29,9 +29,26 @@ const app = express();
 
 // تشغيل الـ CORS والـ OPTIONS أولاً لضمان عدم رفض أو سقوط أي هيدرز (Authorization)
 // استبدل كود الـ cors القديم بهذا السطر فقط:
-app.use(cors({ origin: true, credentials: true }));
+app.use(
+  cors({
+    origin: true, // 👈 بيخلي السيرفر يرد بنفس اسم دومين الفرونت اللي باعت الطلب تلقائياً
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: [
+      "X-CSRF-Token",
+      "X-Requested-With",
+      "Accept",
+      "Accept-Version",
+      "Content-Length",
+      "Content-MD5",
+      "Content-Type",
+      "Date",
+      "X-Api-Version",
+      "Authorization",
+    ],
+    credentials: true,
+  }),
+);
 app.options("*", cors());
-
 // الـ Body Parsers والـ Cookie Parser في البداية عشان البيانات تتقرأ فوراً
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
