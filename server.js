@@ -28,20 +28,8 @@ const app = express();
 // ============================
 
 // تشغيل الـ CORS والـ OPTIONS أولاً لضمان عدم رفض أو سقوط أي هيدرز (Authorization)
-app.use(
-  cors({
-    origin: [
-      "http://localhost:3000",
-      "http://localhost:5173",
-      "http://localhost:62719",
-      "https://mttw-express-frontend.vercel.app",
-      "https://smart-plant-health-frontend.vercel.app", // 👈 تذكر تغيير هذا الدومين لرابط الـ الفرونت النهائي
-    ],
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  }),
-);
+// استبدل كود الـ cors القديم بهذا السطر فقط:
+app.use(cors({ origin: true, credentials: true }));
 app.options("*", cors());
 
 // الـ Body Parsers والـ Cookie Parser في البداية عشان البيانات تتقرأ فوراً
