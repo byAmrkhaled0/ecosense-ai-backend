@@ -20,58 +20,42 @@ const morgan = require("morgan");
 const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./swagger");
 
+// 1️⃣ إنشاء تطبيق Express أولاً
 const app = express();
 
 // ============================
-// 🛡️ Middlewares & Security (الترتيب الصحيح والمعدل القاطع للـ CORS)
+// 🛡️ Middlewares & Security (الترتيب الصحيح والمعدل)
 // ============================
 
-// 1️⃣ الـ Middleware اليدوي الصارم للرد على الـ Preflight والـ CORS فوراً قبل أي مكتبة تانية
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (origin) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader(
-    "Access-Control-Allow-Methods",
-    "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
-  );
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization",
-  );
-
-  // إذا كان الطلب OPTIONS رد بـ 200 فوراً وقفل السكة عشان المتصفح يعدي الـ Preflight
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-  next();
-});
-
-// تشغيل مكتبة CORS كأمان إضافي للطلبات الفعلية
-app.use(cors({ origin: true, credentials: true }));
+// تشغيل الـ CORS والـ OPTIONS أولاً لضمان عدم رفض أو سقوط أي هيدرز (Authorization)
+app.use(
+  cors({
+    origin: [
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "http://localhost:62719",
+      "https://ecosensedabab.netlify.app",
+      "https://mttw-express-frontend.vercel.app",
+      "https://smart-plant-health-frontend.vercel.app", // 👈 تذكر تغيير هذا الدومين لرابط الـ الفرونت النهائي
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  }),
+);
 app.options("*", cors());
 
-// الـ Body Parsers والـ Cookie Parser
+// الـ Body Parsers والـ Cookie Parser في البداية عشان البيانات تتقرأ فوراً
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 app.use(morgan("dev"));
-
-// 🛑 التعديل الجوهري: تعطيل الـ crossOriginResourcePolicy عشان Helmet ميبلوکش الـ Requests الخارجية
-app.use(
-  helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" },
-    crossOriginOpenerPolicy: { policy: "unsafe-none" },
-  }),
-);
-
+app.use(helmet());
 app.use(hpp());
 app.use(mongoSanitize());
 
-// 🧹 دالة الـ HTML Sanitization (XSS Prevention)
+// 🧹 تعديل دالة الـ HTML Sanitization (XSS Prevention)
 app.use((req, res, next) => {
   if (
     req.body &&
@@ -101,34 +85,49 @@ app.use("/api", limiter);
 // 2️⃣ إنشاء سيرفر HTTP وربطه بـ Express
 const server = http.createServer(app);
 
-// 3️⃣ إعداد Socket.io (تعديل الـ origin ليكون مرن ويقبل الفرونت الجديد)
+// 3️⃣ إعداد Socket.io
 const io = new Server(server, {
   cors: {
-    origin: true,
+    origin: [
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "http://localhost:62719",
+      "https://ecosensedabab.netlify.app",
+      "https://mttw-express-frontend.vercel.app",
+      "https://smart-plant-health-frontend.vercel.app",
+    ],
     credentials: true,
   },
   allowEIO3: true,
   transports: ["polling", "websocket"],
 });
 
+// تخزين الـ IO في الـ app لاستخدامه في الـ Controllers
 app.set("io", io);
 
+// 🚨 التعديل السحري لـ Vercel: ترويض مسار الـ socket.io ومنعه من السقوط في الـ 404
 app.get("/socket.io/", (req, res) => {
   res.status(200).end();
 });
 
+// تعريف منطق Socket.io
 io.on("connection", (socket) => {
   console.log("🟢 A user connected: ", socket.id);
+
   socket.on("join", (userId) => {
     socket.join(userId);
     console.log(`👤 User ${userId} joined their private room`);
   });
+
   socket.on("disconnect", () => {
     console.log("🔴 User disconnected");
   });
 });
 
+// 🔌 الاتصال بقاعدة البيانات
 connectDB();
+
+// 🛡️ إعدادات Passport
 require("./config/passport")(passport);
 app.use(passport.initialize());
 
@@ -164,6 +163,9 @@ app.use("/api/main", require("./routes/mainRoutes"));
 app.use("/api/admin", require("./routes/adminRoutes"));
 app.use("/api/reports", require("./routes/reportRoutes"));
 
+// ============================
+// ❌ 404 Handler
+// ============================
 app.use((req, res, next) => {
   res.status(404).json({
     success: false,
@@ -171,6 +173,9 @@ app.use((req, res, next) => {
   });
 });
 
+// ============================
+// 🔥 Global Error Handler
+// ============================
 app.use((err, req, res, next) => {
   console.error("🔥 Server Error:", err.stack);
   res.status(500).json({
@@ -179,6 +184,19 @@ app.use((err, req, res, next) => {
   });
 });
 
+// ============================
+// 🚀 Start Server
+// ============================
 const PORT = process.env.PORT || 6000;
+server.listen(PORT, () => {
+  console.log(`
+    *****************************************
+    🌐 EcoSense Secure Server is LIVE
+    🚀 Port: ${PORT}
+    🛡️ Mode: ${process.env.NODE_ENV || "development"}
+    📡 Socket.io: Enabled
+    *****************************************
+  `);
+});
 
 module.exports = app;
