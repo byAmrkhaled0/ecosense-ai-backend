@@ -102,7 +102,7 @@ const io = new Server(server, {
   transports: ["polling", "websocket"],
 });
 
-// تخزين الـ IO في الـ app لاستخدامه في الـ Controllers
+// تخزين الـ IO في الـ app لاستخدامه في الـ Controllersrigger redeplo
 app.set("io", io);
 
 // 🚨 التعديل السحري لـ Vercel: ترويض مسار الـ socket.io ومنعه من السقوط في الـ 404
