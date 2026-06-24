@@ -3,7 +3,7 @@ import numpy as np
 
 
 # =========================
-# Smart image analyzer V7
+# Smart image analyzer V8
 # =========================
 # Rule-based Computer Vision analyzer for plant health.
 #
@@ -21,6 +21,7 @@ import numpy as np
 # - عدم اعتبار الظلال مرض
 # - عدم اعتبار النبات المصاب Healthy
 # - توحيد status مع visual_problem
+# - رفض الصور التي لا تحتوي على نبات حقيقي واضح قبل التشخيص
 
 
 def _safe_ratio(part, total):
@@ -60,6 +61,131 @@ def _largest_plant_region(mask):
     cleaned[labels == largest_label] = 255
 
     return cleaned
+
+
+
+def _reject_non_plant_response(reason, metrics=None):
+    """
+    Standard response when the uploaded image is not a real/clear plant image.
+    The API layer will return this object with HTTP 400 because it contains "error".
+    """
+    return {
+        "error": "No real plant detected",
+        "message_ar": "لم يتم اكتشاف نبات حقيقي واضح في الصورة.",
+        "final_status": "Invalid Image",
+        "status": "Rejected",
+        "image_stress": "Invalid Image",
+        "is_plant": False,
+        "reason": reason,
+        "metrics": metrics or {},
+        "capture_tips": [
+            "ارفع صورة واضحة لنبات أو ورقة حقيقية.",
+            "خلي النبات أو الورقة ظاهرين في منتصف الصورة.",
+            "تجنب تصوير أشياء غير نباتية أو خلفيات خضراء فقط.",
+            "تجنب الصور المظلمة جدًا أو المهزوزة.",
+            "استخدم إضاءة طبيعية بدون ظلال قوية."
+        ]
+    }
+
+
+def _validate_real_plant_image(
+    img,
+    plant_mask,
+    plant_pixels,
+    green_ratio,
+    yellow_ratio,
+    brown_ratio,
+    dark_spot_ratio
+):
+    """
+    Plant Validation Gate.
+    This step runs before disease/stress classification.
+
+    Goal:
+    - Reject images that do not contain a clear real plant/leaf.
+    - Prevent the analyzer from diagnosing random objects, walls, clothes, tables,
+      screens, or any non-plant image as Healthy/Moderate/High.
+
+    Note:
+    This is still rule-based validation. For near-perfect rejection, a separate
+    Plant vs Non-Plant CNN classifier can be added later.
+    """
+    height, width = img.shape[:2]
+    image_area = float(height * width)
+    plant_area_ratio = plant_pixels / image_area if image_area > 0 else 0.0
+
+    # Real plant colors are usually represented by at least one of these masks.
+    # Dark alone is not enough because many non-plant objects can be dark.
+    plant_color_ratio = green_ratio + yellow_ratio + brown_ratio
+
+    # Edge/texture check helps reject solid green backgrounds or smooth objects.
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 60, 160)
+    edge_pixels = int(np.sum((edges > 0) & (plant_mask > 0)))
+    edge_ratio = _safe_ratio(edge_pixels, plant_pixels)
+
+    metrics = {
+        "plant_area_ratio": round(plant_area_ratio, 3),
+        "plant_color_ratio": round(plant_color_ratio, 3),
+        "green_ratio": round(green_ratio, 3),
+        "yellow_ratio": round(yellow_ratio, 3),
+        "brown_ratio": round(brown_ratio, 3),
+        "dark_spot_ratio": round(dark_spot_ratio, 3),
+        "edge_ratio": round(edge_ratio, 4),
+        "plant_pixels": int(plant_pixels)
+    }
+
+    if plant_pixels < 1200 or plant_area_ratio < 0.035:
+        return False, _reject_non_plant_response(
+            "The image does not contain enough visible plant area.",
+            metrics
+        )
+
+    if plant_color_ratio < 0.22:
+        return False, _reject_non_plant_response(
+            "The detected region does not contain enough natural plant colors.",
+            metrics
+        )
+
+    has_clear_plant_color = (
+        green_ratio >= 0.16
+        or yellow_ratio >= 0.18
+        or brown_ratio >= 0.12
+        or (green_ratio + yellow_ratio) >= 0.22
+    )
+
+    if not has_clear_plant_color:
+        return False, _reject_non_plant_response(
+            "No clear green/yellow/brown plant tissue was detected.",
+            metrics
+        )
+
+    # If the mask is mostly dark, it is usually not a useful plant image.
+    if dark_spot_ratio >= 0.70 and plant_color_ratio < 0.35:
+        return False, _reject_non_plant_response(
+            "The image is mostly dark and does not show plant tissue clearly.",
+            metrics
+        )
+
+    # Reject flat/smooth green backgrounds that look like a solid color surface.
+    # Real leaves normally have at least some texture/edges/veins or boundaries.
+    if (
+        green_ratio >= 0.88
+        and yellow_ratio < 0.04
+        and brown_ratio < 0.04
+        and dark_spot_ratio < 0.04
+        and plant_area_ratio >= 0.65
+        and edge_ratio < 0.0025
+    ):
+        return False, _reject_non_plant_response(
+            "The image looks like a flat green background, not a real plant.",
+            metrics
+        )
+
+    return True, {
+        "is_plant": True,
+        "plant_validation": metrics
+    }
 
 
 def _is_very_green_healthy(
@@ -573,6 +699,23 @@ def analyze_plant_image(image_file):
         dark_spot_ratio = _safe_ratio(dark_pixels, plant_pixels)
 
         # =========================
+        # Real Plant Validation Gate
+        # =========================
+        # Do not diagnose random objects. The image must contain a clear real plant/leaf.
+        is_valid_plant, plant_validation = _validate_real_plant_image(
+            img=img,
+            plant_mask=plant_mask,
+            plant_pixels=plant_pixels,
+            green_ratio=green_ratio,
+            yellow_ratio=yellow_ratio,
+            brown_ratio=brown_ratio,
+            dark_spot_ratio=dark_spot_ratio
+        )
+
+        if not is_valid_plant:
+            return plant_validation
+
+        # =========================
         # Damage score
         # =========================
 
@@ -670,6 +813,8 @@ def analyze_plant_image(image_file):
             "damaged_ratio": round(damaged_ratio, 3),
 
             "plant_pixels": plant_pixels,
+            "is_plant": True,
+            "plant_validation": plant_validation.get("plant_validation", {}),
 
             "visual_flags": {
                 "has_chlorosis": yellow_ratio >= 0.25,
