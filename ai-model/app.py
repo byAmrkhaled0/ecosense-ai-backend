@@ -960,8 +960,8 @@ def build_image_only_response(image_result, crop_type="Unknown"):
 @app.route("/", methods=["GET"])
 def home():
   return jsonify({
-    "message": "Ecosense AI Plant Health API V7 is running",
-    "version": "7.0",
+    "message": "Ecosense AI Plant Health API V8 is running",
+    "version": "8.0",
     "endpoints": {
       "sensors_only": "POST /api/predict_sensors → JSON body",
       "image_only":  "POST /api/predict_image  → form-data (file + cropType)",
@@ -1087,7 +1087,7 @@ def predict_image():
     image_result = analyze_plant_image(image_file)
 
     if "error" in image_result:
-      return jsonify({"error": image_result["error"]}), 400
+      return jsonify(clean_response_text(image_result)), 400
 
     response_data = build_image_only_response(image_result, crop_type)
     response_data["source"] = "image"
@@ -1150,7 +1150,7 @@ def predict_with_image():
     image_result = analyze_plant_image(image_file)
 
     if "error" in image_result:
-      return jsonify({"error": image_result["error"]}), 400
+      return jsonify(clean_response_text(image_result)), 400
 
     if has_all_sensor_fields(form_data):
       # Mode A: full fusion
@@ -1236,6 +1236,6 @@ def get_history():
 
 
 if __name__ == "__main__":
-  print("Starting Ecosense AI Plant Health API V7...")
+  print("Starting Ecosense AI Plant Health API V8...")
   port = int(os.environ.get("PORT", 5000))
   app.run(debug=False, host="0.0.0.0", port=port)
