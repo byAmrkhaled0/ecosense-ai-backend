@@ -960,8 +960,8 @@ def build_image_only_response(image_result, crop_type="Unknown"):
 @app.route("/", methods=["GET"])
 def home():
   return jsonify({
-    "message": "Ecosense AI Plant Health API V8 is running",
-    "version": "8.0",
+    "message": "Ecosense AI Plant Health API V10 is running",
+    "version": "10.0",
     "endpoints": {
       "sensors_only": "POST /api/predict_sensors → JSON body",
       "image_only":  "POST /api/predict_image  → form-data (file + cropType)",
@@ -1236,6 +1236,6 @@ def get_history():
 
 
 if __name__ == "__main__":
-  print("Starting Ecosense AI Plant Health API V8...")
+  print("Starting Ecosense AI Plant Health API V10...")
   port = int(os.environ.get("PORT", 5000))
   app.run(debug=False, host="0.0.0.0", port=port)
