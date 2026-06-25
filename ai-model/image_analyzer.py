@@ -3,7 +3,7 @@ import numpy as np
 
 
 # =========================
-# Smart image analyzer V8
+# Smart image analyzer V9
 # =========================
 # Rule-based Computer Vision analyzer for plant health.
 #
@@ -22,6 +22,7 @@ import numpy as np
 # - عدم اعتبار النبات المصاب Healthy
 # - توحيد status مع visual_problem
 # - رفض الصور التي لا تحتوي على نبات حقيقي واضح قبل التشخيص
+# - رفض صور الدوائر الإلكترونية والسيميوليشن والـ screenshots قبل التشخيص
 
 
 def _safe_ratio(part, total):
@@ -88,6 +89,86 @@ def _reject_non_plant_response(reason, metrics=None):
     }
 
 
+def _scene_validation_metrics(img):
+    """
+    Detect non-natural scenes such as:
+    - circuit diagrams
+    - Tinkercad/Cirkit screenshots
+    - UI screenshots
+    - white/gray grid backgrounds
+    - images made mostly of straight lines and electronic parts
+
+    This does NOT replace plant analysis; it is only a gate before diagnosis.
+    """
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    h, s, v = cv2.split(hsv)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    total_pixels = float(img.shape[0] * img.shape[1])
+
+    low_sat_bright_ratio = float(np.sum((s < 35) & (v > 170))) / total_pixels
+    very_bright_ratio = float(np.sum(v > 225)) / total_pixels
+    very_dark_ratio = float(np.sum(v < 45)) / total_pixels
+
+    edges = cv2.Canny(gray, 60, 160)
+    edge_ratio_global = float(np.sum(edges > 0)) / total_pixels
+
+    # Hough lines catches circuit/simulation/screenshots because they contain many straight wires/grid lines.
+    lines = cv2.HoughLinesP(
+        edges,
+        rho=1,
+        theta=np.pi / 180,
+        threshold=80,
+        minLineLength=55,
+        maxLineGap=8
+    )
+
+    line_count = 0 if lines is None else len(lines)
+
+    # Blue electronic boards/components are common in the uploaded circuit images,
+    # while they should not dominate a real plant photo.
+    blue_mask = cv2.inRange(
+        hsv,
+        np.array([90, 45, 40]),
+        np.array([135, 255, 255])
+    )
+    blue_ratio = float(np.sum(blue_mask > 0)) / total_pixels
+
+    # UI screenshots often contain large flat white/gray background areas.
+    screenshot_like = (
+        (low_sat_bright_ratio > 0.48 and line_count >= 25)
+        or (very_bright_ratio > 0.55 and line_count >= 18)
+        or (edge_ratio_global > 0.055 and line_count >= 45)
+        or (blue_ratio > 0.08 and line_count >= 18)
+    )
+
+    return {
+        "low_sat_bright_ratio": round(low_sat_bright_ratio, 3),
+        "very_bright_ratio": round(very_bright_ratio, 3),
+        "very_dark_ratio": round(very_dark_ratio, 3),
+        "edge_ratio_global": round(edge_ratio_global, 4),
+        "straight_line_count": int(line_count),
+        "blue_ratio": round(blue_ratio, 3),
+        "screenshot_or_circuit_like": bool(screenshot_like)
+    }
+
+
+def _reject_if_screenshot_or_circuit(img):
+    """
+    Reject obvious screenshots, electronic circuit diagrams, and simulation images.
+    These images may contain green/yellow/brown/dark pixels, but they are not real plants.
+    """
+    metrics = _scene_validation_metrics(img)
+
+    if metrics["screenshot_or_circuit_like"]:
+        return _reject_non_plant_response(
+            "The uploaded image looks like a screenshot, circuit diagram, simulation, or electronic hardware image, not a real plant.",
+            metrics
+        )
+
+    return None
+
+
 def _validate_real_plant_image(
     img,
     plant_mask,
@@ -124,6 +205,8 @@ def _validate_real_plant_image(
     edge_pixels = int(np.sum((edges > 0) & (plant_mask > 0)))
     edge_ratio = _safe_ratio(edge_pixels, plant_pixels)
 
+    scene_metrics = _scene_validation_metrics(img)
+
     metrics = {
         "plant_area_ratio": round(plant_area_ratio, 3),
         "plant_color_ratio": round(plant_color_ratio, 3),
@@ -132,8 +215,15 @@ def _validate_real_plant_image(
         "brown_ratio": round(brown_ratio, 3),
         "dark_spot_ratio": round(dark_spot_ratio, 3),
         "edge_ratio": round(edge_ratio, 4),
-        "plant_pixels": int(plant_pixels)
+        "plant_pixels": int(plant_pixels),
+        **scene_metrics
     }
+
+    if scene_metrics.get("screenshot_or_circuit_like"):
+        return False, _reject_non_plant_response(
+            "The uploaded image looks like a screenshot, circuit diagram, simulation, or electronic hardware image, not a real plant.",
+            metrics
+        )
 
     if plant_pixels < 1200 or plant_area_ratio < 0.035:
         return False, _reject_non_plant_response(
@@ -157,6 +247,18 @@ def _validate_real_plant_image(
     if not has_clear_plant_color:
         return False, _reject_non_plant_response(
             "No clear green/yellow/brown plant tissue was detected.",
+            metrics
+        )
+
+    # Circuit and simulation images can pass color masks because wires and modules have
+    # green/yellow/brown/dark pixels. A real plant should not look like a line-heavy UI/circuit scene.
+    if (
+        scene_metrics.get("straight_line_count", 0) >= 22
+        and scene_metrics.get("low_sat_bright_ratio", 0) > 0.42
+        and green_ratio < 0.55
+    ):
+        return False, _reject_non_plant_response(
+            "The image contains many straight lines and a bright grid/UI background, so it is not accepted as a real plant image.",
             metrics
         )
 
@@ -629,6 +731,15 @@ def analyze_plant_image(image_file):
         # =========================
 
         img = cv2.resize(img, (700, 700))
+
+        # =========================
+        # Non-plant scene rejection
+        # =========================
+        # This rejects circuit/simulation/screenshots before color-based plant diagnosis.
+        non_plant_scene = _reject_if_screenshot_or_circuit(img)
+        if non_plant_scene is not None:
+            return non_plant_scene
+
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         h, s, v = cv2.split(hsv)
 
