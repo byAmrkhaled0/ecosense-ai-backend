@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title data-i18n="aiPredictionTitle">AI Prediction - EcoSense</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+
+<body class="dashboard-page">
+
+    <!-- Topbar (نفس صفحة الرفع بالظبط) -->
+ <header class="topbar">
+    <button id="menuToggle" class="menu-btn">
+        <i class="fa-solid fa-bars"></i>
+    </button>
+
+    <img src="images/Logo-removebg-preview-removebg-preview.png" class="logo">
+
+    <button id="langToggle" class="lang-btn">
+        <i class="fa-solid fa-globe"></i>
+    </button>
+</header>
+
+    <div class="dashboard-layout">
+
+        <!-- Sidebar (نفس النظام) -->
+        <aside class="sidebar">
+             <h3 data-i18n="dashboard">Dashboard</h3>
+            <ul>
+                <li onclick="window.location.href='dashboard.html'" data-i18n="dashboard"></li>
+                <li onclick="window.location.href='sensors.html'" data-i18n="sensors"></li>
+                <li class="active" onclick="window.location.href='Ai-prediction.html'" data-i18n="aiPrediction"></li>
+                <li onclick="window.location.href='images.html'" data-i18n="images"></li>
+                <li onclick="window.location.href='ai-chat.html'" data-i18n="aiChat"></li>
+
+            </ul>
+        </aside>
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+        <!-- Main -->
+        <main class="main-content">
+
+            <h2 data-i18n="aiPredictionTitle"></h2>
+
+            <div class="ai-section">
+
+                <h3 class="predict-title" data-i18n="predictPage">Predict Page</h3>
+
+                <div class="ai-controls">
+                    <button id="analyzeBtn" class="analyze-btn" data-i18n="analyzeData">Analyze Data</button>
+                    <span id="loadingBadge" class="loading-pill" data-i18n="loading">Loading</span>
+                </div>
+
+                <!-- Skeleton -->
+                <div id="skeleton" class="skeleton-lines">
+                    <div class="line full"></div>
+                    <div class="line mid"></div>
+                    <div class="line small"></div>
+                </div>
+
+                <!-- Result Card -->
+                <div class="ai-result-card">
+
+                    <h4 data-i18n="resultCard"></h4>
+                    <p class="result-sub" data-i18n="predictionAdvice"></p>
+
+                    <div class="prediction-box">
+                        <span data-i18n="prediction"></span>
+                        <h5 id="predictionText" data-i18n="predictionResult"></h5>
+                    </div>
+
+                    <div class="advice-box">
+                        <span data-i18n="advice"></span>
+                        <h5 id="adviceText" data-i18n="adviceResult"></h5>
+                        <div class="ai-badge">AI</div>
+                    </div>
+
+                </div>
+            </div>
+
+    </div>
+    <footer class="footer">
+        © 2026 EcoSense - Smart Agriculture Monitoring Platform
+    </footer>
+
+    </main>
+    </div>
+
+
+
+    <script src="js/translation.js"></script>
+    <script src="js/main.js"></script>
+</body>
+
+</html>

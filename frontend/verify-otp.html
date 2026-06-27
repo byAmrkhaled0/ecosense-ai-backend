@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title data-i18n="pageTitle">Verify OTP - EcoSense</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body class="otp-page">
+
+    <div id="navbar-container"></div>
+
+    <div class="auth-container">
+        <div class="auth-card otp-card">
+
+            <h2 data-i18n="verifyTitle">Verify OTP</h2>
+
+            <p data-i18n="verifySubtitle">
+                Enter the 6-digit OTP code sent to your email address
+            </p>
+
+            <form id="otpForm">
+
+                <div class="otp-inputs">
+                    <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*">
+                    <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*">
+                    <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*">
+                    <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*">
+                    <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*">
+                    <input type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*">
+                </div>
+
+                <button type="submit" class="primary-btn" data-i18n="verifyBtn">
+                    Verify
+                </button>
+
+                <p class="resend">
+                    <span data-i18n="noCode">Didn't receive the code?</span>
+                    <a href="#" data-i18n="resend">Resend OTP</a>
+                </p>
+
+            </form>
+
+        </div>
+    </div>
+
+    <footer data-i18n="footerText">
+        © 2026 EcoSense – Smart Agriculture Monitoring Platform
+    </footer>
+
+    <script src="js/main.js"></script>
+
+</body>
+
+</html>

@@ -1,0 +1,961 @@
+import cv2
+import numpy as np
+
+
+# =========================
+# Smart image analyzer V9
+# =========================
+# Rule-based Computer Vision analyzer for plant health.
+#
+# يرجع:
+# - حالة النبات
+# - المرض/المشكلة المحتملة
+# - شرح التشخيص
+# - العلاج
+# - التوصيات
+# - نسب التحليل
+#
+# ملاحظة مهمة:
+# ده OpenCV rule-based analyzer مش CNN model.
+# لكنه مضبوط لتقليل الأخطاء الشائعة:
+# - عدم اعتبار الظلال مرض
+# - عدم اعتبار النبات المصاب Healthy
+# - توحيد status مع visual_problem
+# - رفض الصور التي لا تحتوي على نبات حقيقي واضح قبل التشخيص
+# - رفض صور الدوائر الإلكترونية والسيميوليشن والـ screenshots قبل التشخيص
+
+
+def _safe_ratio(part, total):
+    if total <= 0:
+        return 0.0
+    return float(part) / float(total)
+
+
+def _clean_mask(mask, kernel_size=5):
+    kernel = np.ones((kernel_size, kernel_size), np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    return mask
+
+
+def _largest_plant_region(mask):
+    """
+    Keep the largest connected plant-like region.
+    Helps reduce background noise.
+    """
+
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
+        mask,
+        connectivity=8
+    )
+
+    if num_labels <= 1:
+        return mask
+
+    largest_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
+    largest_area = stats[largest_label, cv2.CC_STAT_AREA]
+
+    if largest_area < 800:
+        return mask
+
+    cleaned = np.zeros_like(mask)
+    cleaned[labels == largest_label] = 255
+
+    return cleaned
+
+
+
+def _reject_non_plant_response(reason, metrics=None):
+    """
+    Standard response when the uploaded image is not a real/clear plant image.
+    The API layer will return this object with HTTP 400 because it contains "error".
+    """
+    return {
+        "error": "No real plant detected",
+        "message_ar": "لم يتم اكتشاف نبات حقيقي واضح في الصورة.",
+        "final_status": "Invalid Image",
+        "status": "Rejected",
+        "image_stress": "Invalid Image",
+        "is_plant": False,
+        "reason": reason,
+        "metrics": metrics or {},
+        "capture_tips": [
+            "ارفع صورة واضحة لنبات أو ورقة حقيقية.",
+            "خلي النبات أو الورقة ظاهرين في منتصف الصورة.",
+            "تجنب تصوير أشياء غير نباتية أو خلفيات خضراء فقط.",
+            "تجنب الصور المظلمة جدًا أو المهزوزة.",
+            "استخدم إضاءة طبيعية بدون ظلال قوية."
+        ]
+    }
+
+
+def _scene_validation_metrics(img):
+    """
+    Detect non-natural scenes such as:
+    - circuit diagrams
+    - Tinkercad/Cirkit screenshots
+    - UI screenshots
+    - white/gray grid backgrounds
+    - images made mostly of straight lines and electronic parts
+
+    This does NOT replace plant analysis; it is only a gate before diagnosis.
+    """
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    h, s, v = cv2.split(hsv)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    total_pixels = float(img.shape[0] * img.shape[1])
+
+    low_sat_bright_ratio = float(np.sum((s < 35) & (v > 170))) / total_pixels
+    very_bright_ratio = float(np.sum(v > 225)) / total_pixels
+    very_dark_ratio = float(np.sum(v < 45)) / total_pixels
+
+    edges = cv2.Canny(gray, 60, 160)
+    edge_ratio_global = float(np.sum(edges > 0)) / total_pixels
+
+    # Hough lines catches circuit/simulation/screenshots because they contain many straight wires/grid lines.
+    lines = cv2.HoughLinesP(
+        edges,
+        rho=1,
+        theta=np.pi / 180,
+        threshold=80,
+        minLineLength=55,
+        maxLineGap=8
+    )
+
+    line_count = 0 if lines is None else len(lines)
+
+    # Blue electronic boards/components are common in the uploaded circuit images,
+    # while they should not dominate a real plant photo.
+    blue_mask = cv2.inRange(
+        hsv,
+        np.array([90, 45, 40]),
+        np.array([135, 255, 255])
+    )
+    blue_ratio = float(np.sum(blue_mask > 0)) / total_pixels
+
+    # UI screenshots often contain large flat white/gray background areas.
+    screenshot_like = (
+        (low_sat_bright_ratio > 0.48 and line_count >= 25)
+        or (very_bright_ratio > 0.55 and line_count >= 18)
+        or (edge_ratio_global > 0.055 and line_count >= 45)
+        or (blue_ratio > 0.08 and line_count >= 18)
+    )
+
+    return {
+        "low_sat_bright_ratio": round(low_sat_bright_ratio, 3),
+        "very_bright_ratio": round(very_bright_ratio, 3),
+        "very_dark_ratio": round(very_dark_ratio, 3),
+        "edge_ratio_global": round(edge_ratio_global, 4),
+        "straight_line_count": int(line_count),
+        "blue_ratio": round(blue_ratio, 3),
+        "screenshot_or_circuit_like": bool(screenshot_like)
+    }
+
+
+def _reject_if_screenshot_or_circuit(img):
+    """
+    Reject obvious screenshots, electronic circuit diagrams, and simulation images.
+    These images may contain green/yellow/brown/dark pixels, but they are not real plants.
+    """
+    metrics = _scene_validation_metrics(img)
+
+    if metrics["screenshot_or_circuit_like"]:
+        return _reject_non_plant_response(
+            "The uploaded image looks like a screenshot, circuit diagram, simulation, or electronic hardware image, not a real plant.",
+            metrics
+        )
+
+    return None
+
+
+def _validate_real_plant_image(
+    img,
+    plant_mask,
+    plant_pixels,
+    green_ratio,
+    yellow_ratio,
+    brown_ratio,
+    dark_spot_ratio
+):
+    """
+    Plant Validation Gate.
+    This step runs before disease/stress classification.
+
+    Goal:
+    - Reject images that do not contain a clear real plant/leaf.
+    - Prevent the analyzer from diagnosing random objects, walls, clothes, tables,
+      screens, or any non-plant image as Healthy/Moderate/High.
+
+    Note:
+    This is still rule-based validation. For near-perfect rejection, a separate
+    Plant vs Non-Plant CNN classifier can be added later.
+    """
+    height, width = img.shape[:2]
+    image_area = float(height * width)
+    plant_area_ratio = plant_pixels / image_area if image_area > 0 else 0.0
+
+    # Real plant colors are usually represented by at least one of these masks.
+    # Dark alone is not enough because many non-plant objects can be dark.
+    plant_color_ratio = green_ratio + yellow_ratio + brown_ratio
+
+    # Edge/texture check helps reject solid green backgrounds or smooth objects.
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 60, 160)
+    edge_pixels = int(np.sum((edges > 0) & (plant_mask > 0)))
+    edge_ratio = _safe_ratio(edge_pixels, plant_pixels)
+
+    scene_metrics = _scene_validation_metrics(img)
+
+    metrics = {
+        "plant_area_ratio": round(plant_area_ratio, 3),
+        "plant_color_ratio": round(plant_color_ratio, 3),
+        "green_ratio": round(green_ratio, 3),
+        "yellow_ratio": round(yellow_ratio, 3),
+        "brown_ratio": round(brown_ratio, 3),
+        "dark_spot_ratio": round(dark_spot_ratio, 3),
+        "edge_ratio": round(edge_ratio, 4),
+        "plant_pixels": int(plant_pixels),
+        **scene_metrics
+    }
+
+    if scene_metrics.get("screenshot_or_circuit_like"):
+        return False, _reject_non_plant_response(
+            "The uploaded image looks like a screenshot, circuit diagram, simulation, or electronic hardware image, not a real plant.",
+            metrics
+        )
+
+    if plant_pixels < 1200 or plant_area_ratio < 0.035:
+        return False, _reject_non_plant_response(
+            "The image does not contain enough visible plant area.",
+            metrics
+        )
+
+    if plant_color_ratio < 0.22:
+        return False, _reject_non_plant_response(
+            "The detected region does not contain enough natural plant colors.",
+            metrics
+        )
+
+    has_clear_plant_color = (
+        green_ratio >= 0.16
+        or yellow_ratio >= 0.18
+        or brown_ratio >= 0.12
+        or (green_ratio + yellow_ratio) >= 0.22
+    )
+
+    if not has_clear_plant_color:
+        return False, _reject_non_plant_response(
+            "No clear green/yellow/brown plant tissue was detected.",
+            metrics
+        )
+
+    # Circuit and simulation images can pass color masks because wires and modules have
+    # green/yellow/brown/dark pixels. A real plant should not look like a line-heavy UI/circuit scene.
+    if (
+        scene_metrics.get("straight_line_count", 0) >= 22
+        and scene_metrics.get("low_sat_bright_ratio", 0) > 0.42
+        and green_ratio < 0.55
+    ):
+        return False, _reject_non_plant_response(
+            "The image contains many straight lines and a bright grid/UI background, so it is not accepted as a real plant image.",
+            metrics
+        )
+
+    # If the mask is mostly dark, it is usually not a useful plant image.
+    if dark_spot_ratio >= 0.70 and plant_color_ratio < 0.35:
+        return False, _reject_non_plant_response(
+            "The image is mostly dark and does not show plant tissue clearly.",
+            metrics
+        )
+
+    # Reject flat/smooth green backgrounds that look like a solid color surface.
+    # Real leaves normally have at least some texture/edges/veins or boundaries.
+    if (
+        green_ratio >= 0.88
+        and yellow_ratio < 0.04
+        and brown_ratio < 0.04
+        and dark_spot_ratio < 0.04
+        and plant_area_ratio >= 0.65
+        and edge_ratio < 0.0025
+    ):
+        return False, _reject_non_plant_response(
+            "The image looks like a flat green background, not a real plant.",
+            metrics
+        )
+
+    return True, {
+        "is_plant": True,
+        "plant_validation": metrics
+    }
+
+
+def _is_very_green_healthy(
+    green_ratio,
+    yellow_ratio,
+    brown_ratio,
+    health_score
+):
+    """
+    Strong healthy override.
+    Used for images that are clearly green and healthy,
+    even if dark shadows are detected.
+    """
+
+    return (
+        green_ratio >= 0.65
+        and health_score >= 0.70
+        and yellow_ratio < 0.10
+        and brown_ratio < 0.08
+    )
+
+
+def _has_leaf_spot_pattern(
+    yellow_ratio,
+    dark_spot_ratio,
+    damaged_ratio
+):
+    """
+    Leaf spot pattern:
+    yellowing + visible dark spots + enough damage.
+    """
+
+    return (
+        dark_spot_ratio >= 0.14
+        and yellow_ratio >= 0.20
+        and damaged_ratio >= 0.35
+    )
+
+
+def _has_severe_leaf_spot_pattern(
+    yellow_ratio,
+    dark_spot_ratio,
+    damaged_ratio
+):
+    """
+    Severe fungal/spot pattern.
+    """
+
+    return (
+        dark_spot_ratio >= 0.30
+        and yellow_ratio >= 0.25
+        and damaged_ratio >= 0.60
+    )
+
+
+def _has_necrosis_pattern(
+    brown_ratio,
+    damaged_ratio
+):
+    """
+    Necrosis / leaf burn pattern.
+    """
+
+    return (
+        brown_ratio >= 0.22
+        and damaged_ratio >= 0.50
+    )
+
+
+def _is_regular_healthy(
+    green_ratio,
+    yellow_ratio,
+    brown_ratio,
+    dark_spot_ratio,
+    damaged_ratio,
+    health_score
+):
+    """
+    Normal healthy condition.
+    More strict than very_green_healthy.
+    """
+
+    return (
+        green_ratio >= 0.40
+        and yellow_ratio < 0.25
+        and damaged_ratio < 0.42
+        and dark_spot_ratio < 0.25
+        and brown_ratio < 0.15
+        and health_score >= 0.38
+    )
+
+
+def _classify_image_stress(
+    green_ratio,
+    yellow_ratio,
+    brown_ratio,
+    dark_spot_ratio,
+    damaged_ratio,
+    health_score
+):
+    """
+    Final stress classification.
+    Order is important.
+    """
+
+    # 1) Clearly healthy green image
+    if _is_very_green_healthy(
+        green_ratio,
+        yellow_ratio,
+        brown_ratio,
+        health_score
+    ):
+        return "Healthy"
+
+    # 2) Severe disease patterns first
+    if _has_severe_leaf_spot_pattern(
+        yellow_ratio,
+        dark_spot_ratio,
+        damaged_ratio
+    ):
+        return "High Stress"
+
+    if _has_necrosis_pattern(
+        brown_ratio,
+        damaged_ratio
+    ):
+        return "High Stress"
+
+    # 3) Leaf spot should override normal healthy
+    if _has_leaf_spot_pattern(
+        yellow_ratio,
+        dark_spot_ratio,
+        damaged_ratio
+    ):
+        return "Moderate Stress"
+
+    # 4) Regular healthy
+    if _is_regular_healthy(
+        green_ratio,
+        yellow_ratio,
+        brown_ratio,
+        dark_spot_ratio,
+        damaged_ratio,
+        health_score
+    ):
+        return "Healthy"
+
+    # 5) General stress
+    if damaged_ratio < 0.58:
+        return "Moderate Stress"
+
+    return "High Stress"
+
+
+def _classify_visual_problem(
+    green_ratio,
+    yellow_ratio,
+    brown_ratio,
+    dark_spot_ratio,
+    damaged_ratio,
+    health_score
+):
+    """
+    Detect the likely visual problem.
+    Must be consistent with stress classification.
+    """
+
+    # 1) Clearly healthy green image
+    if _is_very_green_healthy(
+        green_ratio,
+        yellow_ratio,
+        brown_ratio,
+        health_score
+    ):
+        return {
+            "visual_problem": "No Clear Disease Detected",
+            "visual_problem_ar": "لا توجد أعراض مرضية واضحة",
+            "disease_name": "No Clear Disease Detected",
+            "disease_name_ar": "لا توجد أعراض مرضية واضحة",
+            "visual_explanation":
+                "النبات يبدو صحيًا من الصورة؛ نسبة اللون الأخضر عالية ولا يوجد اصفرار أو تلف واضح."
+        }
+
+    # 2) Severe leaf spot / fungal suspicion
+    if _has_severe_leaf_spot_pattern(
+        yellow_ratio,
+        dark_spot_ratio,
+        damaged_ratio
+    ):
+        return {
+            "visual_problem": "Severe Leaf Spot / Fungal Suspicion",
+            "visual_problem_ar": "اشتباه إصابة فطرية أو تبقع أوراق شديد",
+            "disease_name": "Severe Leaf Spot / Fungal Suspicion",
+            "disease_name_ar": "اشتباه تبقع أوراق أو إصابة فطرية شديدة",
+            "visual_explanation":
+                "تم رصد اصفرار واضح مع بقع داكنة كثيرة ونسبة تلف مرتفعة، "
+                "وده يشير لاحتمال إصابة فطرية أو تبقع أوراق بدرجة شديدة."
+        }
+
+    # 3) Necrosis / burn
+    if _has_necrosis_pattern(
+        brown_ratio,
+        damaged_ratio
+    ):
+        return {
+            "visual_problem": "Necrosis / Severe Leaf Damage",
+            "visual_problem_ar": "تلف أو احتراق واضح في نسيج الورقة",
+            "disease_name": "Possible Necrosis / Leaf Burn",
+            "disease_name_ar": "اشتباه احتراق أو تلف نسيج الورقة",
+            "visual_explanation":
+                "نسبة المناطق البنية أو الجافة مرتفعة، "
+                "وده ممكن يكون بسبب حرارة عالية، ملوحة، نقص مياه، أو تلف شديد."
+        }
+
+    # 4) Leaf spot / fungal suspicion
+    if _has_leaf_spot_pattern(
+        yellow_ratio,
+        dark_spot_ratio,
+        damaged_ratio
+    ):
+        return {
+            "visual_problem": "Leaf Spot / Fungal Suspicion",
+            "visual_problem_ar": "اشتباه تبقع أوراق أو إصابة فطرية",
+            "disease_name": "Possible Leaf Spot Disease",
+            "disease_name_ar": "اشتباه تبقع أوراق أو إصابة فطرية",
+            "visual_explanation":
+                "تم رصد اصفرار واضح مع بقع داكنة على الورقة، "
+                "وده يشير غالبًا لاشتباه تبقع أوراق أو إصابة فطرية."
+        }
+
+    # 5) Chlorosis / nutrient deficiency
+    if (
+        yellow_ratio >= 0.50
+        and green_ratio < 0.40
+        and dark_spot_ratio < 0.18
+        and brown_ratio < 0.15
+    ):
+        return {
+            "visual_problem": "Chlorosis / Nutrient Deficiency Suspicion",
+            "visual_problem_ar": "اصفرار أوراق أو اشتباه نقص عناصر",
+            "disease_name": "Possible Chlorosis",
+            "disease_name_ar": "اشتباه اصفرار بسبب نقص عناصر",
+            "visual_explanation":
+                "الاصفرار واضح بدون بقع داكنة كثيرة، "
+                "وده ممكن يرتبط بنقص عناصر مثل النيتروجين أو الحديد أو ضعف امتصاص."
+        }
+
+    # 6) Regular healthy
+    if _is_regular_healthy(
+        green_ratio,
+        yellow_ratio,
+        brown_ratio,
+        dark_spot_ratio,
+        damaged_ratio,
+        health_score
+    ):
+        return {
+            "visual_problem": "No Clear Disease Detected",
+            "visual_problem_ar": "لا توجد أعراض مرضية واضحة",
+            "disease_name": "No Clear Disease Detected",
+            "disease_name_ar": "لا توجد أعراض مرضية واضحة",
+            "visual_explanation":
+                "النبات يبدو بحالة جيدة من الصورة، ولا توجد أعراض مرضية واضحة بدرجة خطيرة."
+        }
+
+    return {
+        "visual_problem": "General Visual Stress",
+        "visual_problem_ar": "إجهاد بصري عام",
+        "disease_name": "General Visual Stress",
+        "disease_name_ar": "إجهاد بصري عام",
+        "visual_explanation":
+            "توجد علامات إجهاد على الورقة، لكن الصورة وحدها لا تكفي لتحديد مرض محدد بدقة."
+    }
+
+
+def _build_treatment_plan(image_stress, visual_problem):
+    if image_stress == "Healthy":
+        return [
+            {
+                "priority": 3,
+                "title": "استمرار المتابعة",
+                "details": "النبات يبدو سليمًا من الصورة. استمر في الري والتسميد والمتابعة الدورية."
+            },
+            {
+                "priority": 3,
+                "title": "تصوير دوري",
+                "details": "التقط صورة جديدة عند ظهور اصفرار أو بقع أو تغير في شكل الورقة."
+            }
+        ]
+
+    if visual_problem in (
+        "Leaf Spot / Fungal Suspicion",
+        "Severe Leaf Spot / Fungal Suspicion"
+    ):
+        return [
+            {
+                "priority": 1,
+                "title": "عزل الأوراق المصابة",
+                "details": "لو الإصابة واضحة في ورقة أو أكثر، افصل الأوراق المصابة لتقليل انتشار العدوى."
+            },
+            {
+                "priority": 1,
+                "title": "إزالة الأوراق شديدة الإصابة",
+                "details": "أزل الأوراق التي تحتوي على بقع كثيرة أو تلف شديد."
+            },
+            {
+                "priority": 2,
+                "title": "تحسين التهوية",
+                "details": "حسّن حركة الهواء حول النبات وقلل الرطوبة الزائدة."
+            },
+            {
+                "priority": 2,
+                "title": "تجنب بلل الأوراق",
+                "details": "اسقِ النبات عند التربة وتجنب رش الماء على الأوراق."
+            },
+            {
+                "priority": 2,
+                "title": "معاملة فطرية مناسبة",
+                "details": "استخدم معاملة فطرية مناسبة حسب نوع النبات أو استشر مختص زراعي."
+            }
+        ]
+
+    if visual_problem == "Chlorosis / Nutrient Deficiency Suspicion":
+        return [
+            {
+                "priority": 1,
+                "title": "مراجعة التسميد",
+                "details": "راجع النيتروجين والحديد والمغنيسيوم في برنامج التسميد."
+            },
+            {
+                "priority": 2,
+                "title": "فحص pH التربة",
+                "details": "اختلال pH قد يمنع امتصاص العناصر حتى لو موجودة."
+            },
+            {
+                "priority": 2,
+                "title": "مراجعة الري",
+                "details": "زيادة أو نقص الري قد يسبب اصفرار وضعف امتصاص."
+            }
+        ]
+
+    if visual_problem == "Necrosis / Severe Leaf Damage":
+        return [
+            {
+                "priority": 1,
+                "title": "إزالة الأجزاء التالفة",
+                "details": "أزل الأجزاء الجافة أو المحترقة إذا كانت شديدة التلف."
+            },
+            {
+                "priority": 1,
+                "title": "فحص الحرارة والري",
+                "details": "راجع درجة الحرارة ورطوبة التربة والملوحة."
+            },
+            {
+                "priority": 2,
+                "title": "فحص باقي النبات",
+                "details": "تأكد هل التلف في ورقة واحدة فقط أم منتشر في النبات."
+            }
+        ]
+
+    return [
+        {
+            "priority": 2,
+            "title": "متابعة خلال 48 ساعة",
+            "details": "التقط صورة جديدة من نفس الزاوية وتابع هل الأعراض تزيد أم تقل."
+        },
+        {
+            "priority": 2,
+            "title": "مراجعة الري والإضاءة والتهوية",
+            "details": "الإجهاد البصري قد يكون بسبب ظروف بيئية غير مناسبة."
+        },
+        {
+            "priority": 3,
+            "title": "فحص يدوي",
+            "details": "افحص أسفل الورقة والساق بحثًا عن حشرات أو بقع أو عفن."
+        }
+    ]
+
+
+def _build_image_recommendations(treatment_plan):
+    return [
+        item["title"] + ": " + item["details"]
+        for item in treatment_plan
+    ]
+
+
+def _build_status_text(image_stress, visual_problem):
+    if image_stress == "Healthy":
+        return "Healthy"
+
+    if visual_problem in (
+        "Leaf Spot / Fungal Suspicion",
+        "Severe Leaf Spot / Fungal Suspicion",
+        "Necrosis / Severe Leaf Damage",
+        "Chlorosis / Nutrient Deficiency Suspicion"
+    ):
+        return "Infected"
+
+    return "Needs Review"
+
+
+def _build_confidence(image_stress, health_score, severity_score, visual_problem):
+    if image_stress == "Healthy":
+        return round(max(0.70, min(0.98, health_score)), 3)
+
+    if visual_problem in (
+        "Leaf Spot / Fungal Suspicion",
+        "Severe Leaf Spot / Fungal Suspicion",
+        "Necrosis / Severe Leaf Damage"
+    ):
+        return round(max(0.65, min(0.92, severity_score + 0.25)), 3)
+
+    if image_stress == "Moderate Stress":
+        return round(max(0.55, min(0.80, severity_score)), 3)
+
+    return round(max(0.70, min(0.95, severity_score)), 3)
+
+
+def analyze_plant_image(image_file):
+    try:
+        if image_file is None:
+            return {"error": "No image provided"}
+
+        # Flask upload OR local path
+        if isinstance(image_file, str):
+            img = cv2.imread(image_file)
+        else:
+            file_bytes = image_file.read()
+
+            if not file_bytes:
+                return {"error": "Empty image file"}
+
+            np_arr = np.frombuffer(file_bytes, np.uint8)
+            img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+        if img is None:
+            return {"error": "Invalid or unsupported image"}
+
+        # =========================
+        # Resize and convert
+        # =========================
+
+        img = cv2.resize(img, (700, 700))
+
+        # =========================
+        # Non-plant scene rejection
+        # =========================
+        # This rejects circuit/simulation/screenshots before color-based plant diagnosis.
+        non_plant_scene = _reject_if_screenshot_or_circuit(img)
+        if non_plant_scene is not None:
+            return non_plant_scene
+
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        h, s, v = cv2.split(hsv)
+
+        # =========================
+        # Color masks
+        # =========================
+
+        # Healthy green tissue
+        green_mask = cv2.inRange(
+            hsv,
+            np.array([35, 35, 35]),
+            np.array([90, 255, 255])
+        )
+
+        # Yellow / chlorosis
+        yellow_mask = cv2.inRange(
+            hsv,
+            np.array([18, 45, 75]),
+            np.array([38, 255, 255])
+        )
+
+        # Brown / necrosis
+        brown_mask = cv2.inRange(
+            hsv,
+            np.array([5, 45, 20]),
+            np.array([22, 255, 210])
+        )
+
+        # Dark spots
+        # Conservative threshold to reduce false positives from shadows.
+        dark_mask = np.where(
+            ((v < 70) & (s > 45)),
+            255,
+            0
+        ).astype(np.uint8)
+
+        # =========================
+        # Plant mask
+        # =========================
+
+        plant_mask = cv2.bitwise_or(green_mask, yellow_mask)
+        plant_mask = cv2.bitwise_or(plant_mask, brown_mask)
+        plant_mask = cv2.bitwise_or(plant_mask, dark_mask)
+
+        plant_mask = _clean_mask(plant_mask, kernel_size=5)
+        plant_mask = _largest_plant_region(plant_mask)
+
+        plant_pixels = int(np.sum(plant_mask > 0))
+
+        if plant_pixels < 800:
+            return {
+                "error": "No plant detected clearly",
+                "message_ar": "الصورة غير واضحة أو النبات غير ظاهر بشكل كافٍ."
+            }
+
+        # =========================
+        # Pixel counting
+        # =========================
+
+        green_pixels = int(np.sum((green_mask > 0) & (plant_mask > 0)))
+        yellow_pixels = int(np.sum((yellow_mask > 0) & (plant_mask > 0)))
+        brown_pixels = int(np.sum((brown_mask > 0) & (plant_mask > 0)))
+        dark_pixels = int(np.sum((dark_mask > 0) & (plant_mask > 0)))
+
+        green_ratio = _safe_ratio(green_pixels, plant_pixels)
+        yellow_ratio = _safe_ratio(yellow_pixels, plant_pixels)
+        brown_ratio = _safe_ratio(brown_pixels, plant_pixels)
+        dark_spot_ratio = _safe_ratio(dark_pixels, plant_pixels)
+
+        # =========================
+        # Real Plant Validation Gate
+        # =========================
+        # Do not diagnose random objects. The image must contain a clear real plant/leaf.
+        is_valid_plant, plant_validation = _validate_real_plant_image(
+            img=img,
+            plant_mask=plant_mask,
+            plant_pixels=plant_pixels,
+            green_ratio=green_ratio,
+            yellow_ratio=yellow_ratio,
+            brown_ratio=brown_ratio,
+            dark_spot_ratio=dark_spot_ratio
+        )
+
+        if not is_valid_plant:
+            return plant_validation
+
+        # =========================
+        # Damage score
+        # =========================
+
+        damaged_ratio = min(
+            1.0,
+            (yellow_ratio * 0.35)
+            + (brown_ratio * 0.75)
+            + (dark_spot_ratio * 0.85)
+        )
+
+        # =========================
+        # Health score
+        # =========================
+
+        health_score = (
+            (1.20 * green_ratio)
+            - (0.35 * yellow_ratio)
+            - (0.75 * brown_ratio)
+            - (0.75 * dark_spot_ratio)
+            + 0.25
+        )
+
+        health_score = max(0.0, min(1.0, health_score))
+        severity_score = round(1.0 - health_score, 3)
+
+        # =========================
+        # Classification
+        # =========================
+
+        image_stress = _classify_image_stress(
+            green_ratio=green_ratio,
+            yellow_ratio=yellow_ratio,
+            brown_ratio=brown_ratio,
+            dark_spot_ratio=dark_spot_ratio,
+            damaged_ratio=damaged_ratio,
+            health_score=health_score
+        )
+
+        visual_info = _classify_visual_problem(
+            green_ratio=green_ratio,
+            yellow_ratio=yellow_ratio,
+            brown_ratio=brown_ratio,
+            dark_spot_ratio=dark_spot_ratio,
+            damaged_ratio=damaged_ratio,
+            health_score=health_score
+        )
+
+        treatment_plan = _build_treatment_plan(
+            image_stress=image_stress,
+            visual_problem=visual_info["visual_problem"]
+        )
+
+        recommendations = _build_image_recommendations(treatment_plan)
+
+        status = _build_status_text(
+            image_stress=image_stress,
+            visual_problem=visual_info["visual_problem"]
+        )
+
+        confidence = _build_confidence(
+            image_stress=image_stress,
+            health_score=health_score,
+            severity_score=severity_score,
+            visual_problem=visual_info["visual_problem"]
+        )
+
+        summary = visual_info["visual_explanation"]
+
+        # =========================
+        # Final response
+        # =========================
+
+        return {
+            "status": status,
+            "final_status": image_stress,
+            "image_stress": image_stress,
+
+            "disease_name": visual_info["disease_name"],
+            "disease_name_ar": visual_info["disease_name_ar"],
+
+            "visual_problem": visual_info["visual_problem"],
+            "visual_problem_ar": visual_info["visual_problem_ar"],
+            "visual_explanation": visual_info["visual_explanation"],
+
+            "summary": summary,
+            "confidence": confidence,
+
+            "health_score": round(health_score, 3),
+            "severity_score": severity_score,
+
+            "green_ratio": round(green_ratio, 3),
+            "yellow_ratio": round(yellow_ratio, 3),
+            "brown_ratio": round(brown_ratio, 3),
+            "dark_spot_ratio": round(dark_spot_ratio, 3),
+            "damaged_ratio": round(damaged_ratio, 3),
+
+            "plant_pixels": plant_pixels,
+            "is_plant": True,
+            "plant_validation": plant_validation.get("plant_validation", {}),
+
+            "visual_flags": {
+                "has_chlorosis": yellow_ratio >= 0.25,
+                "has_dark_spots": (
+                    dark_spot_ratio >= 0.14
+                    and yellow_ratio >= 0.15
+                ),
+                "has_necrosis": brown_ratio >= 0.18,
+                "needs_attention": image_stress != "Healthy"
+            },
+
+            "treatment_plan": treatment_plan,
+            "image_recommendations": recommendations,
+            "recommendations": recommendations,
+
+            "capture_tips": [
+                "صوّر النبات في إضاءة طبيعية بدون فلاش قوي.",
+                "خلّي الخلفية بسيطة وفاتحة قدر الإمكان.",
+                "قرّب الورقة أو الجزء المصاب من الكاميرا بدون اهتزاز.",
+                "تجنب الظلال القوية لأنها قد تظهر كبقع مرضية."
+            ],
+
+            "note": (
+                "هذا التشخيص تقديري من الصورة فقط. "
+                "للحكم الأدق، يُفضل دمجه مع قراءات الحرارة والرطوبة ورطوبة التربة والإضاءة."
+            )
+        }
+
+    except Exception as e:
+        return {
+            "error": str(e),
+            "message_ar": "حدث خطأ أثناء تحليل الصورة."
+        }

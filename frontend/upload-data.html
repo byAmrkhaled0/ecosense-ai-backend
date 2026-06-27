@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title data-i18n="uploadDataTitle">Upload Sensor Data - EcoSense</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+
+<body class="dashboard-page">
+
+ <header class="topbar">
+    <button id="menuToggle" class="menu-btn">
+        <i class="fa-solid fa-bars"></i>
+    </button>
+
+    <img src="images/Logo-removebg-preview-removebg-preview.png" class="logo">
+
+    <button id="langToggle" class="lang-btn">
+        <i class="fa-solid fa-globe"></i>
+    </button>
+</header>
+
+    <div class="dashboard-layout">
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+             <h3 data-i18n="dashboard">Dashboard</h3>
+            <ul>
+                <li onclick="window.location.href='dashboard.html'" data-i18n="dashboard"></li>
+                <li class="active" onclick="window.location.href='sensors.html'" data-i18n="sensors"></li>
+                <li onclick="window.location.href='Ai-prediction.html'" data-i18n="aiPrediction"></li>
+                <li onclick="window.location.href='images.html'" data-i18n="images"></li>
+                <li onclick="window.location.href='ai-chat.html'" data-i18n="aiChat">
+        AI Chat
+    </li>
+            </ul>
+        </aside>
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+        <!-- Main -->
+        <main class="main-content">
+
+            <h2 data-i18n="uploadDataTitle"></h2>
+
+            <!-- Tabs -->
+            <div class="sensor-tabs">
+                <a href="sensors.html" class="tab" data-i18n="latestReading"></a>
+                <a href="sensor-history.html" class="tab" data-i18n="history"></a>
+                <a href="statistics.html" class="tab" data-i18n="statistics"></a>
+                <a href="upload-data.html" class="tab active" data-i18n="uploadData"></a>
+            </div>
+
+            <!-- Form Section -->
+            <div class="sensor-section">
+
+                <h3 data-i18n="uploadDescription"></h3>
+
+                <form id="uploadForm" class="upload-form">
+
+                    <div class="form-grid">
+                        <div>
+                            <label data-i18n="soilMoisture"></label>
+                            <input type="number" step="0.1" name="soilMoisture" required>
+                        </div>
+
+                        <div>
+                            <label data-i18n="soilTemp"></label>
+                            <input type="number" step="0.1" name="soilTemperature" required>
+                        </div>
+
+                        <div>
+                            <label data-i18n="airTemperature"></label>
+                            <input type="number" step="0.1" name="airTemperature" required>
+                        </div>
+
+                        <div>
+                            <label data-i18n="airHumidity"></label>
+                            <input type="number" step="0.1" name="airHumidity" required>
+                        </div>
+
+                        <div>
+                            <label data-i18n="lightIntensity"></label>
+                            <input type="number" step="0.1" name="lightIntensity" required>
+                        </div>
+
+                        <div>
+                            <label data-i18n="soilPH"></label>
+                            <input type="number" step="0.1" name="soilPH" required>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="upload-btn" data-i18n="uploadData"></button>
+
+                </form>
+
+                <div class="note-box">
+                    <span class="note-badge" data-i18n="note"></span>
+                    <p data-i18n="uploadNote"></p>
+                </div>
+
+            </div>
+
+            <footer class="footer">
+                © 2026 EcoSense - Smart Agriculture Monitoring Platform
+            </footer>
+
+        </main>
+    </div>
+
+    <script>
+        document.getElementById("uploadForm").addEventListener("submit", function (e) {
+            e.preventDefault();
+            alert("Data submitted (Mock Mode)");
+        });
+    </script>
+    <script src="js/translation.js"></script>
+    <script src="js/main.js"></script>
+</body>
+
+</html>

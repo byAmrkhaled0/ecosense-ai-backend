@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title data-i18n="aiChatTitle">AI Chat - EcoSense</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body class="dashboard-page">
+
+<header class="topbar">
+    <button id="menuToggle" class="menu-btn">
+        <i class="fa-solid fa-bars"></i>
+    </button>
+
+    <img src="images/Logo-removebg-preview-removebg-preview.png" class="logo">
+
+    <button id="langToggle" class="lang-btn">
+        <i class="fa-solid fa-globe"></i>
+    </button>
+</header>
+
+<div class="dashboard-layout">
+
+    <aside class="sidebar">
+        <h3 class="menu-title" data-i18n="dashboard">Dashboard</h3>
+
+        <ul>
+            <li onclick="window.location.href='dashboard.html'" data-i18n="dashboard">Dashboard</li>
+
+            <li onclick="window.location.href='sensors.html'" data-i18n="sensors">Sensors</li>
+
+            <li onclick="window.location.href='Ai-prediction.html'" data-i18n="aiPrediction">Ai Prediction</li>
+
+            <li onclick="window.location.href='images.html'" data-i18n="images">Images</li>
+
+            <li class="active" data-i18n="aiChat">AI Chat</li>
+        </ul>
+    </aside>
+
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <main class="main-content">
+
+        <h2 data-i18n="aiChat">AI Chat</h2>
+
+        <div class="chat-container">
+
+            <div id="chat-box" class="chat-box"></div>
+
+            <div class="chat-input">
+                <input 
+                    type="text" 
+                    id="user-input" 
+                    placeholder="Type your message..."
+                    data-i18n-placeholder="chatPlaceholder"
+                >
+
+                <button onclick="sendMessage()" data-i18n="sendBtn">
+                    <i class="fa-solid fa-paper-plane"></i>
+                </button>
+            </div>
+
+        </div>
+
+    </main>
+
+</div>
+
+<footer data-i18n="footerText">
+    © 2026 EcoSense – Smart Agriculture Monitoring Platform
+</footer>
+
+<script src="js/translation.js"></script>
+<script src="js/main.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EcoSense</title>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="css/style.css">
+
+  <script>
+    const savedLang = localStorage.getItem("lang");
+    if (savedLang === "ar") {
+      document.documentElement.classList.add("rtl");
+    }
+  </script>
+
+</head>
+
+<body>
+
+  <div id="navbar-container"></div>
+
+  <section class="hero">
+
+    <div class="hero-left">
+
+      <div class="badge">
+        <span class="dot"></span>
+        <span data-i18n="badge">Sensors + AI Agriculture</span>
+      </div>
+
+      <h1>EcoSense</h1>
+
+      <p data-i18n="desc">
+        An intelligent platform for monitoring soil and agricultural environmental
+        conditions using Sensors and AI.
+      </p>
+
+      <div class="features">
+        <strong data-i18n="usercan">The user can:</strong>
+        <ul>
+          <li data-i18n="f1"></li>
+          <li data-i18n="f2"></li>
+          <li data-i18n="f3"></li>
+          <li data-i18n="f4"></li>
+          <li data-i18n="f5"></li>
+        </ul>
+      </div>
+
+      <div class="hero-buttons">
+        <button class="btn-primary" onclick="goSignup()" data-i18n="start"></button>
+        <button class="btn-outline" data-i18n="google" onclick="googleLogin()"></button>
+      </div>
+    </div>
+
+    <div class="hero-right">
+
+      <div class="card live-card">
+        <h3 data-i18n="live"></h3>
+        <div class="tags">
+          <span data-i18n="realtime"></span>
+          <span data-i18n="secure"></span>
+        </div>
+      </div>
+
+      <div class="card sensor-card">
+        <h3 data-i18n="soil"></h3>
+        <div class="sensor-grid">
+  <div>
+    <small data-i18n="soilMoisture">Soil Moisture</small>
+    <b>42%</b>
+  </div>
+
+  <div>
+    <small data-i18n="soilTemperature">Soil Temperature</small>
+    <b>24°C</b>
+  </div>
+
+  <div>
+    <small data-i18n="soilPH">Soil pH</small>
+    <b>6.8</b>
+  </div>
+
+  <div>
+    <small data-i18n="lightIntensity">Light Intensity</small>
+    <b>780 lx</b>
+  </div>
+</div>
+      </div>
+
+      <div class="card ai-card">
+        <h3>AI Prediction</h3>
+        <div class="ai-inner">
+          <small data-i18n="predict"></small>
+          <p data-i18n="advice"></p>
+          <span class="ai-tag">AI</span>
+        </div>
+      </div>
+
+    </div>
+
+  </section>
+
+  <footer>
+    © 2026 EcoSense – Smart Agriculture Monitoring Platform
+  </footer>
+
+  <script src="js/translation.js"></script>
+  <script src="js/main.js"></script>
+
+</body>
+
+</html>

@@ -1,2 +1,22 @@
+<<<<<<< HEAD
 node_modules
 .env
+=======
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+.env
+venv/
+.venv/
+env/
+
+prediction_history.json
+*.log
+
+backup_unused/
+.DS_Store
+Thumbs.db.vscode/
+plant.jpg
+>>>>>>> bed382e502113da181d96fc4263ac55940a7ce15
