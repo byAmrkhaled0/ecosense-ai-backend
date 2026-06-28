@@ -1,0 +1,77 @@
+{
+	"info": {
+		"name": "EcoSense Full System - FINAL",
+		"description": "Complete Professional API Collection for EcoSense Smart Farm System",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Authentication & Profile",
+			"item": [
+				{ "name": "Register Owner", "request": { "method": "POST", "body": { "mode": "raw", "raw": "{\n  \"firstName\": \"Mahmoud\",\n  \"lastName\": \"Mansour\",\n  \"email\": \"owner@test.com\",\n  \"password\": \"12345678\",\n  \"address\": \"Cairo\",\n  \"phoneNumber\": \"01012345678\"\n}" }, "url": "{{BASE_URL}}/api/auth/register" } },
+				{ "name": "Verify OTP", "request": { "method": "POST", "body": { "mode": "raw", "raw": "{\n  \"email\": \"owner@test.com\",\n  \"code\": \"123456\"\n}" }, "url": "{{BASE_URL}}/api/auth/verify-otp" } },
+				{ "name": "Login", "event": [{ "listen": "test", "script": { "exec": ["var jsonData = pm.response.json(); if (jsonData.token) { pm.environment.set(\"TOKEN\", jsonData.token); }"] } }], "request": { "method": "POST", "body": { "mode": "raw", "raw": "{\n  \"email\": \"owner@test.com\",\n  \"password\": \"12345678\"\n}" }, "url": "{{BASE_URL}}/api/auth/login" } },
+				{ "name": "Google Auth", "request": { "method": "POST", "body": { "mode": "raw", "raw": "{\n  \"idToken\": \"TOKEN_FROM_FLUTTER\",\n  \"address\": \"Cairo\",\n  \"phoneNumber\": \"010...\"\n}" }, "url": "{{BASE_URL}}/api/auth/google-auth" } },
+				{ "name": "Get My Profile (Me)", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "url": "{{BASE_URL}}/api/auth/me" } },
+				{ "name": "Logout", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "url": "{{BASE_URL}}/api/auth/logout" } }
+			]
+		},
+		{
+			"name": "2. Workers Management",
+			"item": [
+				{ "name": "Add Worker (Owner Only)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "body": { "mode": "raw", "raw": "{\n  \"firstName\": \"Ali\",\n  \"lastName\": \"Worker\",\n  \"email\": \"worker@test.com\",\n  \"password\": \"worker123\",\n  \"address\": \"Farm\",\n  \"phoneNumber\": \"011...\"\n}" }, "url": "{{BASE_URL}}/api/users/add-worker" } },
+				{ "name": "Get All Workers", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "url": "{{BASE_URL}}/api/users/workers" } },
+				{ "name": "Delete Worker", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "url": "{{BASE_URL}}/api/users/worker/:workerId" } }
+			]
+		},
+		{
+			"name": "3. Farm Structure (Sectors & Devices)",
+			"item": [
+				{ "name": "Create Sector", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Greenhouse 1\",\n  \"cropType\": \"Tomato\",\n  \"area\": 1000\n}" }, "url": "{{BASE_URL}}/api/sectors" } },
+				{ "name": "Get All Sectors", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "url": "{{BASE_URL}}/api/sectors" } },
+				{ "name": "Register Device", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "body": { "mode": "raw", "raw": "{\n  \"deviceSerial\": \"SN-123\",\n  \"sectorId\": \"ID_HERE\"\n}" }, "url": "{{BASE_URL}}/api/devices" } },
+				{ "name": "Get My Devices", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "url": "{{BASE_URL}}/api/devices" } }
+			]
+		},
+		{
+			"name": "4. Sensors & AI",
+			"item": [
+				{ "name": "IoT Upload (Hardware)", "request": { "method": "POST", "body": { "mode": "raw", "raw": "{\n  \"deviceSerial\": \"SN-123\",\n  \"temperature\": 25,\n  \"humidity\": 60,\n  \"soilMoisture\": 40,\n  \"soilPH\": 6.5\n}" }, "url": "{{BASE_URL}}/api/sensors/upload" } },
+				{ "name": "Get Latest Reading", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "url": "{{BASE_URL}}/api/sensors/latest" } },
+				{ "name": "Predict Status (AI)", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "body": { "mode": "raw", "raw": "{\n  \"sensorId\": \"ID_HERE\"\n}" }, "url": "{{BASE_URL}}/api/sensors/predict" } },
+				{ "name": "Sensor History", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "url": "{{BASE_URL}}/api/sensors/history?sectorId=ID_HERE" } },
+				{ "name": "Sector Stats", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "url": "{{BASE_URL}}/api/sensors/stats?sectorId=ID_HERE" } }
+			]
+		},
+		{
+			"name": "5. Image Logs (Disease)",
+			"item": [
+				{ "name": "Upload Plant Image", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "body": { "mode": "formdata", "formdata": [{ "key": "image", "type": "file" }, { "key": "sectorId", "value": "ID_HERE" }] }, "url": "{{BASE_URL}}/api/images/upload" } },
+				{ "name": "Get Image History", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "url": "{{BASE_URL}}/api/images/history" } },
+				{ "name": "Update AI Analysis (Image)", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "body": { "mode": "raw", "raw": "{\"status\":\"Infected\", \"diseaseName\":\"Late Blight\"}" }, "url": "{{BASE_URL}}/api/images/:id/analyze" } },
+				{ "name": "DELETE Image Log", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "url": "{{BASE_URL}}/api/images/:id" } }
+			]
+		},
+		{
+			"name": "6. Dashboard & Notifications",
+			"item": [
+				{ "name": "Main Dashboard", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "url": "{{BASE_URL}}/api/main/dashboard" } },
+				{ "name": "Get Notifications", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "url": "{{BASE_URL}}/api/main/notifications" } },
+				{ "name": "Mark Notif as Read", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "url": "{{BASE_URL}}/api/main/notifications/:id" } }
+			]
+		},
+    {
+  "name": "7. Admin Panel",
+  "item": [
+    { "name": "Get All System Users", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "url": "{{BASE_URL}}/api/admin/users" } },
+    { "name": "System Global Stats", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "url": "{{BASE_URL}}/api/admin/system-stats" } },
+    { "name": "Admin Delete User", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{TOKEN}}" }], "url": "{{BASE_URL}}/api/admin/user/:id" } }
+  ]
+}
+    
+	],
+	"variable": [
+		{ "key": "BASE_URL", "value": "http://localhost:3000" },
+		{ "key": "TOKEN", "value": "" }
+	]
+}
