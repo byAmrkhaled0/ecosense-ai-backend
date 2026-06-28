@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "ECOSENSE AI",
+    "slug": "ecosense-ai-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "ecosenseai",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/logo.png",
+    "splash": {
+      "image": "./assets/logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F3F8F1"
+    },
+    "android": {
+      "package": "com.ecosense.ai.mobile",
+      "versionCode": 2,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logo.png",
+        "backgroundColor": "#F3F8F1"
+      },
+      "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE", "READ_MEDIA_IMAGES"]
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "ECOSENSE AI needs access to your gallery to choose plant images for diagnosis.",
+          "cameraPermission": "ECOSENSE AI needs access to your camera to capture plant images for diagnosis."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "373bc9f9-f449-45fb-b247-1c78127ccb31"
+      }
+    }
+  }
+}
