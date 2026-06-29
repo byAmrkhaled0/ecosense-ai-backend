@@ -142,13 +142,17 @@ exports.analyzeLastReading = async (req, res) => {
         "https://amr2004-ecosense-ai.hf.space/api/predict_sensors",
         {
           cropType: formattedCrop,
-          temperature: Number(lastReading.air.temperature),
-          humidity: Number(lastReading.air.humidity),
-          soilMoisture: Number(lastReading.soil.moisture),
+          temperature: Number(lastReading.air?.temperature) || 25,
+          humidity: Number(lastReading.air?.humidity) || 50,
+          // التعديل السحري: لو القيمة مش موجودة أو مش رقم، ابعت القيمة الافتراضية المناسبة للنبات (مثلاً 30) عشان السيرفر ميضربش
+          soilMoisture: !isNaN(Number(lastReading.soil?.moisture))
+            ? Number(lastReading.soil.moisture)
+            : 30,
           soilTemp:
-            lastReading.soil.temperature !== null
+            lastReading.soil?.temperature !== null &&
+            !isNaN(Number(lastReading.soil?.temperature))
               ? Number(lastReading.soil.temperature)
-              : Number(lastReading.air.temperature) - 2,
+              : (Number(lastReading.air?.temperature) || 25) - 2,
           light: formattedLight,
         },
         {
