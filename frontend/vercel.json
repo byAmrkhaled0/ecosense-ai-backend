@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://ecosense-backend.vercel.app/api/:path*" },
+    { "source": "/ai-model/:path*", "destination": "https://amr2004-ecosense-ai.hf.space/:path*" },
+    { "source": "/ai-combined/:path*", "destination": "https://Amrkhaled2004.pythonanywhere.com/:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

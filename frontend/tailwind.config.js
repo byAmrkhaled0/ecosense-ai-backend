@@ -1,0 +1,80 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  theme: {
+    extend: {
+      fontFamily: {
+        sans: ['DM Sans', 'sans-serif'],
+        mono: ['DM Mono', 'monospace'],
+      },
+      colors: {
+        forest: {
+          50:  '#f0faf0',
+          100: '#dcf5dc',
+          200: '#b9eab9',
+          300: '#86d886',
+          400: '#4fc24f',
+          500: '#28a428',
+          600: '#1a8a1a',
+          700: '#166e16',
+          800: '#145714',
+          900: '#0f450f',
+          950: '#072007',
+        },
+        sage: {
+          50:  '#f5f8f5',
+          100: '#e8f0e8',
+          200: '#d0e2d0',
+          300: '#a8c9a8',
+          400: '#78aa78',
+          500: '#528c52',
+          600: '#3d6e3d',
+          700: '#325832',
+          800: '#2a472a',
+          900: '#233b23',
+        },
+        earth: {
+          50:  '#faf7f2',
+          100: '#f2ebe0',
+          200: '#e4d5bf',
+          300: '#d0b898',
+          400: '#b99270',
+          500: '#a07550',
+          600: '#8a6040',
+          700: '#714e36',
+          800: '#5c4030',
+          900: '#4c352a',
+        },
+        lime: {
+          400: '#a3e635',
+          500: '#84cc16',
+        },
+      },
+      backgroundImage: {
+        'grid-forest': "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cpath d='M0 0h40v40H0z' fill='none'/%3E%3Cpath d='M0 40L40 0M0 0l40 40' stroke='%231a8a1a' stroke-width='0.3' opacity='0.15'/%3E%3C/svg%3E\")",
+      },
+      animation: {
+        'fade-in':    'fadeIn 0.4s ease-out',
+        'slide-up':   'slideUp 0.4s ease-out',
+        'slide-in':   'slideIn 0.35s ease-out',
+        'pulse-slow': 'pulse 3s infinite',
+        'shimmer':    'shimmer 1.8s infinite',
+        'ping-slow':  'ping 2.5s cubic-bezier(0,0,0.2,1) infinite',
+      },
+      keyframes: {
+        fadeIn:  { from: { opacity: 0 }, to: { opacity: 1 } },
+        slideUp: { from: { opacity: 0, transform: 'translateY(16px)' }, to: { opacity: 1, transform: 'translateY(0)' } },
+        slideIn: { from: { opacity: 0, transform: 'translateX(-16px)' }, to: { opacity: 1, transform: 'translateX(0)' } },
+        shimmer: { '0%': { backgroundPosition: '-200% 0' }, '100%': { backgroundPosition: '200% 0' } },
+      },
+      boxShadow: {
+        'forest-sm': '0 2px 8px -2px rgba(26,138,26,0.25)',
+        'forest-md': '0 4px 20px -4px rgba(26,138,26,0.35)',
+        'forest-lg': '0 8px 40px -8px rgba(26,138,26,0.45)',
+        'card':      '0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)',
+        'card-hover':'0 4px 20px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06)',
+      },
+    },
+  },
+  plugins: [],
+}
